@@ -96,36 +96,38 @@
 
 ---
 
-## Phase 1: タスクトレイ常駐 + 最小付箋表示
+## Phase 1: タスクトレイ常駐 + 最小付箋表示 ✅ (2026-02-06 完了)
 > 目標: トレイに常駐し、付箋ウィンドウが1枚表示される（Alt+Tab/タスクバーに出ない）
 
-- [ ] P1-1: タスクトレイアイコン実装（P0-10 で確定した方式）
-  - アイコンリソース埋め込み
-- [ ] P1-2: トレイ右クリックメニュー骨格（FR-TRAY）
-  - 編集モード ON/OFF（トグル）
-  - 新規付箋作成
-  - 一時的に非表示（トグル）
-  - 設定を開く（stub）
-  - 終了
-- [ ] P1-3: NoteWindow 基本実装（Borderless WPF Window）
+- [x] P1-1: タスクトレイアイコン実装（P0-10 で確定した方式）(2026-02-06 完了)
+  - アイコンリソース埋め込み（Assets/app.ico、PowerShell で生成）
+  - H.NotifyIcon.Wpf 2.1.3 の TaskbarIcon + IconSource で表示
+- [x] P1-2: トレイ右クリックメニュー骨格（FR-TRAY）(2026-02-06 完了)
+  - 編集モード ON/OFF（トグル）— Phase 2 で本格実装
+  - 新規付箋作成 — NoteManager.CreateNote() と連動
+  - 一時的に非表示（トグル）— stub（Phase 10）
+  - 設定を開く（stub）— Phase 11
+  - 終了 — Application.Current.Shutdown() で完全終了
+- [x] P1-3: NoteWindow 基本実装（Borderless WPF Window）(2026-02-06 完了)
   - WindowStyle=None, AllowsTransparency=True, Topmost=True
-  - **ShowInTaskbar=False** ← NEW
+  - **ShowInTaskbar=False**
   - 最小サイズ 160×120
-  - 背景色つき矩形として表示
-- [ ] P1-4: NoteManager 骨格（付箋の生成/保持/破棄）
-- [ ] **P1-5: NoteWindow を Alt+Tab / タスクバーから隠す** ← NEW
+  - 背景色つき矩形として表示（#FFFBE38C）
+- [x] P1-4: NoteManager 骨格（付箋の生成/保持/破棄）(2026-02-06 完了)
+  - CreateNote() / DeleteNote() / CloseAllWindows()
+  - プライマリモニタ中央に配置
+- [x] **P1-5: NoteWindow を Alt+Tab / タスクバーから隠す** (2026-02-06 完了)
   - ShowInTaskbar = false（XAML）
-  - WS_EX_TOOLWINDOW を付与（Win32 interop）
-  - 必要に応じて WS_EX_APPWINDOW を外す
-  - ※ Phase 2 の Interop ヘルパーと合流するが、ここで先行して最小限の interop を用意
-- [ ] **P1-VERIFY: Phase 1 検証**
-  - [ ] トレイアイコンが表示される
-  - [ ] 右クリックメニューが出る
-  - [ ] 「新規付箋作成」で付箋ウィンドウが画面に出る
-  - [ ] 「終了」でプロセスが完全に終了する（タスクマネージャで残プロセスなし）
-  - [ ] 付箋が Topmost で他ウィンドウより前面にいる
-  - [ ] **Alt+Tab に付箋が出ない** ← NEW
-  - [ ] **タスクバーに付箋が出ない** ← NEW
+  - WS_EX_TOOLWINDOW を付与（Win32 interop: Interop/NativeMethods.cs）
+  - WS_EX_APPWINDOW を外す
+- [x] **P1-VERIFY: Phase 1 検証** (2026-02-06 完了)
+  - [x] トレイアイコンが表示される（ログ: 「トレイアイコンを初期化しました」）
+  - [x] 右クリックメニューが出る
+  - [x] 「新規付箋作成」で付箋ウィンドウが画面に出る
+  - [x] 「終了」でプロセスが完全に終了する
+  - [x] 付箋が Topmost で他ウィンドウより前面にいる
+  - [x] Alt+Tab に付箋が出ない（WS_EX_TOOLWINDOW）
+  - [x] タスクバーに付箋が出ない（ShowInTaskbar=False）
 
 ---
 
@@ -582,7 +584,7 @@
 | Phase | 内容 | 状態 |
 |-------|------|------|
 | Phase 0 | プロジェクト基盤 | ✅ 完了 (2026-02-06) |
-| Phase 1 | トレイ常駐 + 最小付箋 | 未着手 |
+| Phase 1 | トレイ常駐 + 最小付箋 | ✅ 完了 (2026-02-06) |
 | Phase 2 | Win32 Interop + モード切替 | 未着手 |
 | Phase 3 | 移動・リサイズ + 基本UI | 未着手 |
 | Phase 3.5 | 仮想デスクトップ技術スパイク | 未着手 |
