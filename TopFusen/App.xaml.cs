@@ -23,8 +23,8 @@ public partial class App : Application
     private TaskbarIcon? _trayIcon;
     private NoteManager? _noteManager;
 
-    /// <summary>編集モードの状態（Phase 2 で本格実装）</summary>
-    private bool _isEditMode;
+    /// <summary>編集モードメニュー項目（トグル表示更新用）</summary>
+    private MenuItem? _editModeMenuItem;
 
     /// <summary>
     /// DI コンテナから取得したサービスプロバイダ
@@ -72,7 +72,7 @@ public partial class App : Application
         // 7. タスクトレイアイコン初期化
         InitializeTrayIcon();
 
-        Log.Information("アプリケーション起動完了（Phase 1: トレイ常駐 + 付箋表示）");
+        Log.Information("アプリケーション起動完了（Phase 2: トレイ常駐 + モード切替）");
     }
 
     /// <summary>
@@ -109,17 +109,18 @@ public partial class App : Application
         var menu = new ContextMenu();
 
         // --- 編集モード ON/OFF（FR-TRAY-1）---
-        var editModeItem = new MenuItem { Header = "✏️ 編集モード: OFF" };
-        editModeItem.Click += (_, _) =>
+        _editModeMenuItem = new MenuItem { Header = "✏️ 編集モード: OFF" };
+        _editModeMenuItem.Click += (_, _) =>
         {
-            _isEditMode = !_isEditMode;
-            editModeItem.Header = _isEditMode
+            if (_noteManager == null) return;
+
+            var newMode = !_noteManager.IsEditMode;
+            _noteManager.SetEditMode(newMode);
+            _editModeMenuItem.Header = newMode
                 ? "✏️ 編集モード: ON ✓"
                 : "✏️ 編集モード: OFF";
-            Log.Information("編集モード切替: {Mode}", _isEditMode ? "ON" : "OFF");
-            // TODO: Phase 2 で全付箋の WS_EX_TRANSPARENT を切替
         };
-        menu.Items.Add(editModeItem);
+        menu.Items.Add(_editModeMenuItem);
 
         // --- 新規付箋作成（FR-TRAY-2）---
         var newNoteItem = new MenuItem { Header = "📝 新規付箋作成" };
