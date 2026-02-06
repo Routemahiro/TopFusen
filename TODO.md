@@ -50,6 +50,16 @@
 - ただし重い処理（Registry 読み等）はバックグラウンドで行い、結果を UI スレッドに戻す
 - COM 初期化失敗時はログ出力 + 仮想デスクトップ機能を graceful に無効化
 
+### DJ-6: クリック透過は三重制御方式（Phase 2 で判明）
+- WPF `AllowsTransparency=True` は `WS_EX_LAYERED` を自動付与する
+- `WS_EX_LAYERED` 環境では `WS_EX_TRANSPARENT` の ON/OFF だけではクリック制御が不十分
+- **三重制御方式を採用:**
+  1. `WS_EX_TRANSPARENT`: Win32 レベルのクリック透過
+  2. `WS_EX_NOACTIVATE`: フォーカスを奪わない
+  3. `WM_NCHITTEST` フック: `HTTRANSPARENT` を返してメッセージレベルで透過制御
+- 非干渉モード: 3つすべて ON → 確実にクリック透過
+- 編集モード: WS_EX_TRANSPARENT OFF + WS_EX_NOACTIVATE OFF + WM_NCHITTEST フックが素通し → クリック可能
+
 ---
 
 ## 引き継ぎルール
@@ -131,30 +141,31 @@
 
 ---
 
-## Phase 2: Win32 Interop + モード切替
+## Phase 2: Win32 Interop + モード切替 ✅ (2026-02-06 完了)
 > 目標: 非干渉モード（クリック透過）と編集モードが切り替わる
 > ★ ここが TopFusen の最重要技術検証ポイント
 > ★ 透明Window + クリック透過 + TopMost の共存を検証する
 
-- [ ] P2-1: Win32 Interop ヘルパー作成（Interop/NativeMethods.cs）
-  - SetWindowLong / GetWindowLong（GWL_EXSTYLE）
-  - SetWindowPos（HWND_TOPMOST）
-  - WS_EX_TRANSPARENT / WS_EX_LAYERED / WS_EX_NOACTIVATE / WS_EX_TOOLWINDOW 定数
-- [ ] P2-2: NoteWindow にクリック透過の ON/OFF 実装
-  - 非干渉: WS_EX_TRANSPARENT + WS_EX_NOACTIVATE ON
-  - 編集: WS_EX_TRANSPARENT OFF
-- [ ] P2-3: AppHost にモード管理（IsEditMode プロパティ）
+- [x] P2-1: Win32 Interop ヘルパー拡張（Interop/NativeMethods.cs）(2026-02-06 完了)
+  - WS_EX_TRANSPARENT / WS_EX_LAYERED / WS_EX_NOACTIVATE 定数追加
+- [x] P2-2: NoteWindow にクリック透過の ON/OFF 実装 (2026-02-06 完了)
+  - 三重制御方式: WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WM_NCHITTEST フック
+  - ★重要知見: WPF AllowsTransparency=True（WS_EX_LAYERED）環境では
+    WS_EX_TRANSPARENT の ON/OFF だけではクリック制御が不十分。
+    WM_NCHITTEST で HTTRANSPARENT を返す方式を併用する必要がある
+- [x] P2-3: AppHost にモード管理（IsEditMode プロパティ）(2026-02-06 完了)
+  - NoteManager.SetEditMode() で全付箋に一括適用
   - トレイメニューのトグルと連動
-  - 全 NoteWindow に一括適用
-- [ ] **P2-VERIFY: Phase 2 検証（★最重要）**
-  - [ ] 非干渉モード: 付箋上をクリックすると背後アプリが反応する
-  - [ ] 非干渉モード: 付箋がフォーカスを奪わない
-  - [ ] 編集モード: 付箋をクリックで選択・操作できる
-  - [ ] 編集モード: 付箋以外をクリックしても編集OFFに戻らない
-  - [ ] トレイメニューで ON/OFF が正しくトグルする
-  - [ ] TopMost が維持されている（他ウィンドウで隠れない）
-  - [ ] **AllowsTransparency=True の状態で上記すべてが成立する** ← NEW
-  - [ ] **Alt+Tab / タスクバーに付箋が出ない状態が維持されている** ← NEW
+  - 新規作成時も現在のモードを自動適用
+- [x] **P2-VERIFY: Phase 2 検証（★最重要）** (2026-02-06 完了)
+  - [x] 非干渉モード: 付箋上をクリックすると背後アプリが反応する
+  - [x] 非干渉モード: 付箋がフォーカスを奪わない
+  - [x] 編集モード: 付箋をクリックで選択・操作できる
+  - [x] 編集モード: 付箋以外をクリックしても編集OFFに戻らない
+  - [x] トレイメニューで ON/OFF が正しくトグルする
+  - [x] TopMost が維持されている（他ウィンドウで隠れない）
+  - [x] **AllowsTransparency=True の状態で上記すべてが成立する**
+  - [x] **Alt+Tab / タスクバーに付箋が出ない状態が維持されている**
 
 ---
 
@@ -585,7 +596,7 @@
 |-------|------|------|
 | Phase 0 | プロジェクト基盤 | ✅ 完了 (2026-02-06) |
 | Phase 1 | トレイ常駐 + 最小付箋 | ✅ 完了 (2026-02-06) |
-| Phase 2 | Win32 Interop + モード切替 | 未着手 |
+| Phase 2 | Win32 Interop + モード切替 | ✅ 完了 (2026-02-06) |
 | Phase 3 | 移動・リサイズ + 基本UI | 未着手 |
 | Phase 3.5 | 仮想デスクトップ技術スパイク | 未着手 |
 | Phase 4 | リッチテキスト編集 | 未着手 |
