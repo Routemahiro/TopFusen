@@ -153,3 +153,72 @@ NuGet パッケージ一覧:
 設計判断追加:
   - DJ-6: クリック透過は三重制御方式を採用（WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WM_NCHITTEST）
     WPF AllowsTransparency=True 環境での確実な動作を保証するため
+
+--- 2026-02-07 Phase 3: 付箋の移動・リサイズ + 基本UI ---
+
+実装方針: 案B（WindowChrome + DragMove + 部分バインディング）
+
+[完了] P3-1: WindowChrome 導入
+  - ResizeBorderThickness=6（リサイズハンドル幅）
+  - CaptionHeight=0（カスタムドラッグ領域）
+  - GlassFrameThickness=0（AllowsTransparency=True 環境向け）
+  - ★注意: UseAeroPeek は .NET 8 WPF の WindowChrome に存在しないため除外
+
+[完了] P3-2: ドラッグ移動実装
+  - ツールバー領域（上部 Border）の MouseLeftButtonDown → DragMove()
+  - ドラッグハンドル「⠿」マーク + Cursor=SizeAll
+  - ★WM_NCHITTEST フックとの共存: 編集モード時は IntPtr.Zero を返すので
+    WPF のデフォルト処理に委譲 → WindowChrome のリサイズ判定が正常動作
+
+[完了] P3-3: リサイズ実装
+  - WindowChrome の ResizeBorderThickness=6 で角/辺リサイズを自然に実現
+  - MinWidth=160, MinHeight=120 は XAML で制約済み（Phase 1 から）
+  - AllowsTransparency + WindowChrome の組み合わせで問題なく動作を確認
+
+[完了] P3-4: 選択状態管理
+  - NoteWindow に IsSelected / IsInEditMode プロパティ追加
+  - SetSelected() / SetInEditMode() メソッドで状態変更
+  - UpdateVisualState() で UI 表示制御:
+    - 編集ON + 選択中: ツールバー + 下部アイコン + 枠(BorderBrush) + 影(DropShadowEffect)
+    - それ以外: 本文のみ（枠=Transparent, 影=null, UI=Collapsed）
+  - NoteWindow.OnActivated → NoteActivated イベント → NoteManager.SelectNote() で選択連携
+  - 編集OFF → DeselectAll() で選択クリア
+  - NoteBorder.BorderThickness は常に 2（レイアウトシフト防止）、色の切替で表示制御
+
+[完了] P3-5: 削除ボタン
+  - 下部アイコン列に 🗑 ボタン配置
+  - DeleteButton_Click → DeleteRequested イベント → NoteManager.DeleteNote()
+  - イベント購読解除（UnwireNoteEvents）も確実に実行
+
+[完了] P3-6: 複製ボタン
+  - 下部アイコン列に 📋 ボタン配置
+  - DuplicateButton_Click → DuplicateRequested イベント → NoteManager.DuplicateNote()
+  - +24px ずらし + スタイル（色/不透明度/フォント）コピー + WorkArea クランプ
+  - 複製後に新しい付箋を自動選択
+
+[完了] P3-7: 編集OFF時の全UI非表示
+  - SetEditMode(false) → 全 NoteWindow に SetInEditMode(false) + DeselectAll()
+  - UpdateVisualState() で ToolbarArea / BottomBar を Collapsed, 枠/影を解除
+
+追加実装:
+  - 新規作成時の重なり検知 + ずらし（ApplyOverlapOffset: +24px、最大10回、クランプ付き）
+  - NoteManager にイベント連携パターン（WireUpNoteEvents / UnwireNoteEvents）
+  - ClampToWorkArea ヘルパー（WorkArea 内への位置補正）
+
+[検証] P3-VERIFY: 全項目合格（ユーザー実機確認済み）
+  ✅ ドラッグで付箋を移動できる
+  ✅ 角/辺ドラッグでリサイズできる
+  ✅ 最小サイズ（160×120）以下にならない
+  ✅ 選択中の付箋だけツールバー/アイコン/枠が表示される
+  ✅ 未選択付箋は本文のみ
+  ✅ 削除ボタンで付箋が消える
+  ✅ 複製ボタンで +24px ずれた付箋が生成される
+  ✅ 編集OFF時にすべてのUI要素が消える
+  ✅ AllowsTransparency + WindowChrome でリサイズが正常に動作する
+  ✅ クリック透過（非干渉モード）が引き続き正常
+  ✅ Alt+Tab / タスクバーに付箋が出ない
+
+変更ファイル:
+  - TopFusen/Views/NoteWindow.xaml（WindowChrome + Grid 3行レイアウト + ツールバー + 下部アイコン）
+  - TopFusen/Views/NoteWindow.xaml.cs（選択状態管理 + DragMove + イベント + UpdateVisualState）
+  - TopFusen/Services/NoteManager.cs（選択管理 + 複製 + イベント連携 + 重なり検知）
