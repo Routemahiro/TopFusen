@@ -1,4 +1,7 @@
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media.Imaging;
+using H.NotifyIcon;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TopFusen.Services;
@@ -12,11 +15,17 @@ namespace TopFusen;
 /// - 単一インスタンス制御（Mutex + NamedPipe）
 /// - DI コンテナによるサービス管理
 /// - Serilog によるログ出力
+/// - タスクトレイ常駐 + 付箋管理（Phase 1）
 /// </summary>
 public partial class App : Application
 {
     private SingleInstanceService? _singleInstance;
     private ServiceProvider? _serviceProvider;
+    private TaskbarIcon? _trayIcon;
+    private NoteManager? _noteManager;
+
+    /// <summary>編集モードの状態（Phase 2 で本格実装）</summary>
+    private bool _isEditMode;
 
     /// <summary>
     /// DI コンテナから取得したサービスプロバイダ
@@ -58,10 +67,13 @@ public partial class App : Application
         // 5. SessionEnding フック（Windows ログオフ/シャットダウン時の保存）
         SessionEnding += OnSessionEnding;
 
-        Log.Information("アプリケーション起動完了（Phase 0: 空のWPFアプリとして動作中）");
+        // 6. NoteManager 初期化
+        _noteManager = _serviceProvider.GetRequiredService<NoteManager>();
 
-        // Phase 0 ではメインウィンドウを出さない（トレイ常駐は Phase 1 で実装）
-        // Phase 1 以降でトレイアイコンを設置し、メインウィンドウなし運用に移行
+        // 7. タスクトレイアイコン初期化
+        InitializeTrayIcon();
+
+        Log.Information("アプリケーション起動完了（Phase 1: トレイ常駐 + 付箋表示）");
     }
 
     /// <summary>
@@ -71,8 +83,93 @@ public partial class App : Application
     {
         // Services
         services.AddSingleton<SingleInstanceService>();
+        services.AddSingleton<NoteManager>();
+    }
 
-        // TODO: Phase 1 以降で NoteManager, PersistenceService 等を追加
+    /// <summary>
+    /// タスクトレイアイコンの初期化
+    /// </summary>
+    private void InitializeTrayIcon()
+    {
+        _trayIcon = new TaskbarIcon
+        {
+            ToolTipText = "TopFusen — 付箋オーバーレイ",
+            ContextMenu = CreateTrayContextMenu()
+        };
+
+        // アイコンの設定（pack URI でリソースから読み込み）
+        try
+        {
+            _trayIcon.IconSource = new BitmapImage(
+                new Uri("pack://application:,,,/Assets/app.ico"));
+            Log.Information("トレイアイコンを初期化しました");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "トレイアイコンの読み込みに失敗。デフォルトで続行します");
+        }
+    }
+
+    /// <summary>
+    /// トレイ右クリックメニューの構築（FR-TRAY）
+    /// </summary>
+    private ContextMenu CreateTrayContextMenu()
+    {
+        var menu = new ContextMenu();
+
+        // --- 編集モード ON/OFF（FR-TRAY-1）---
+        var editModeItem = new MenuItem { Header = "✏️ 編集モード: OFF" };
+        editModeItem.Click += (_, _) =>
+        {
+            _isEditMode = !_isEditMode;
+            editModeItem.Header = _isEditMode
+                ? "✏️ 編集モード: ON ✓"
+                : "✏️ 編集モード: OFF";
+            Log.Information("編集モード切替: {Mode}", _isEditMode ? "ON" : "OFF");
+            // TODO: Phase 2 で全付箋の WS_EX_TRANSPARENT を切替
+        };
+        menu.Items.Add(editModeItem);
+
+        // --- 新規付箋作成（FR-TRAY-2）---
+        var newNoteItem = new MenuItem { Header = "📝 新規付箋作成" };
+        newNoteItem.Click += (_, _) =>
+        {
+            _noteManager?.CreateNote();
+        };
+        menu.Items.Add(newNoteItem);
+
+        menu.Items.Add(new Separator());
+
+        // --- 一時的に非表示（FR-TRAY-3）--- stub
+        var hideItem = new MenuItem { Header = "👁 一時的に非表示" };
+        hideItem.Click += (_, _) =>
+        {
+            // TODO: Phase 10 で実装
+            Log.Information("一時非表示（未実装）");
+        };
+        menu.Items.Add(hideItem);
+
+        // --- 設定を開く（FR-TRAY-4）--- stub
+        var settingsItem = new MenuItem { Header = "⚙ 設定..." };
+        settingsItem.Click += (_, _) =>
+        {
+            // TODO: Phase 11 で実装
+            Log.Information("設定画面（未実装）");
+        };
+        menu.Items.Add(settingsItem);
+
+        menu.Items.Add(new Separator());
+
+        // --- 終了（FR-TRAY-5）---
+        var exitItem = new MenuItem { Header = "✖ 終了" };
+        exitItem.Click += (_, _) =>
+        {
+            Log.Information("終了メニューが選択されました");
+            Shutdown();
+        };
+        menu.Items.Add(exitItem);
+
+        return menu;
     }
 
     /// <summary>
@@ -111,6 +208,13 @@ public partial class App : Application
         Log.Information("アプリケーション終了処理開始");
 
         // TODO: Phase 5 で永続化のフラッシュ保存を行う
+
+        // 全付箋ウィンドウを閉じる
+        _noteManager?.CloseAllWindows();
+
+        // トレイアイコンの破棄
+        _trayIcon?.Dispose();
+        _trayIcon = null;
 
         _singleInstance?.Dispose();
         _serviceProvider?.Dispose();
