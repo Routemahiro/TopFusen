@@ -1,5 +1,8 @@
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Effects;
 using Serilog;
 using TopFusen.Interop;
 using TopFusen.Models;
@@ -11,8 +14,7 @@ namespace TopFusen.Views;
 /// - Borderless + TopMost + AllowsTransparency
 /// - ShowInTaskbar=False + WS_EX_TOOLWINDOW で Alt+Tab から隠す
 /// - クリック透過: WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WM_NCHITTEST フック の三重制御
-///   WPF AllowsTransparency=True（WS_EX_LAYERED）環境では WS_EX_TRANSPARENT 単独では
-///   クリック透過の ON/OFF が効かないケースがあるため、WM_NCHITTEST で HTTRANSPARENT を返す方式を併用
+/// - Phase 3: WindowChrome でリサイズ + DragMove + 選択状態管理
 /// </summary>
 public partial class NoteWindow : Window
 {
@@ -31,9 +33,34 @@ public partial class NoteWindow : Window
     /// <summary>初期のクリック透過状態（コンストラクタで決定、OnSourceInitialized で適用）</summary>
     private readonly bool _initialClickThrough;
 
-    // Win32 メッセージ定数
+    // --- Phase 3: 選択・編集状態 ---
+
+    /// <summary>この付箋が選択中かどうか</summary>
+    public bool IsSelected { get; private set; }
+
+    /// <summary>現在の編集モード状態</summary>
+    public bool IsInEditMode { get; private set; }
+
+    // --- Phase 3: イベント（NoteManager への通知用） ---
+
+    /// <summary>この付箋がアクティブ化（クリック）された</summary>
+    public event Action<Guid>? NoteActivated;
+
+    /// <summary>削除がリクエストされた</summary>
+    public event Action<Guid>? DeleteRequested;
+
+    /// <summary>複製がリクエストされた</summary>
+    public event Action<Guid>? DuplicateRequested;
+
+    // --- Win32 メッセージ定数 ---
     private const int WM_NCHITTEST = 0x0084;
     private const int HTTRANSPARENT = -1;
+
+    // --- 選択枠の視覚設定 ---
+    private static readonly SolidColorBrush SelectedBorderBrush
+        = new(Color.FromArgb(180, 80, 80, 80));
+    private static readonly DropShadowEffect SelectedShadow
+        = new() { BlurRadius = 10, ShadowDepth = 2, Opacity = 0.35, Color = Colors.Black };
 
     /// <summary>
     /// 付箋ウィンドウを生成する
@@ -44,6 +71,7 @@ public partial class NoteWindow : Window
     {
         Model = model;
         _initialClickThrough = clickThrough;
+        IsInEditMode = !clickThrough;
 
         InitializeComponent();
 
@@ -57,11 +85,12 @@ public partial class NoteWindow : Window
         SourceInitialized += OnSourceInitialized;
     }
 
+    // ==========================================
+    //  Win32 Interop（Phase 1〜2 から継続）
+    // ==========================================
+
     /// <summary>
     /// HWND 生成後に拡張スタイルとメッセージフックを適用
-    /// - WS_EX_TOOLWINDOW: Alt+Tab / タスクバーから隠す
-    /// - WS_EX_TRANSPARENT + WS_EX_NOACTIVATE: クリック透過（Win32 レベル）
-    /// - WM_NCHITTEST フック: クリック透過（WPF メッセージレベル）
     /// </summary>
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
@@ -85,7 +114,6 @@ public partial class NoteWindow : Window
         _isClickThrough = _initialClickThrough;
 
         // WM_NCHITTEST メッセージフックを登録
-        // AllowsTransparency=True + WS_EX_LAYERED 環境での確実なクリック透過制御
         _hwndSource?.AddHook(WndProc);
 
         Log.Information("NoteWindow 拡張スタイル適用: {NoteId} (ClickThrough={ClickThrough}, ExStyle=0x{ExStyle:X8})",
@@ -95,8 +123,6 @@ public partial class NoteWindow : Window
     /// <summary>
     /// Win32 メッセージフック
     /// 非干渉モード時に WM_NCHITTEST で HTTRANSPARENT を返してクリック透過を実現する
-    /// WS_EX_TRANSPARENT だけでは WPF AllowsTransparency との共存で不十分なため、
-    /// メッセージレベルでの制御を併用する
     /// </summary>
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
@@ -111,11 +137,7 @@ public partial class NoteWindow : Window
 
     /// <summary>
     /// クリック透過の ON/OFF を切り替える（三重制御）
-    /// 1. WS_EX_TRANSPARENT: Win32 レベルのクリック透過
-    /// 2. WS_EX_NOACTIVATE: フォーカスを奪わない
-    /// 3. WM_NCHITTEST フック: _isClickThrough フラグで HTTRANSPARENT を返す
     /// </summary>
-    /// <param name="transparent">true: クリック透過（非干渉モード）, false: クリック可能（編集モード）</param>
     public void SetClickThrough(bool transparent)
     {
         if (_hwnd == IntPtr.Zero)
@@ -124,33 +146,121 @@ public partial class NoteWindow : Window
             return;
         }
 
-        if (_isClickThrough == transparent) return; // 変更なし
+        if (_isClickThrough == transparent) return;
 
         var exStyle = NativeMethods.GetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE);
 
-        Log.Information("SetClickThrough 変更前: {NoteId} ExStyle=0x{ExStyle:X8}", Model.NoteId, exStyle);
-
         if (transparent)
         {
-            // 非干渉モード: クリック透過 + フォーカスを奪わない
             exStyle |= NativeMethods.WS_EX_TRANSPARENT;
             exStyle |= NativeMethods.WS_EX_NOACTIVATE;
         }
         else
         {
-            // 編集モード: クリック透過解除
             exStyle &= ~NativeMethods.WS_EX_TRANSPARENT;
             exStyle &= ~NativeMethods.WS_EX_NOACTIVATE;
         }
 
         NativeMethods.SetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE, exStyle);
-
-        // _isClickThrough を更新 → WM_NCHITTEST フックの判定に即時反映
         _isClickThrough = transparent;
 
-        // 変更が実際に適用されたか確認
-        var newExStyle = NativeMethods.GetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE);
-        Log.Information("SetClickThrough 変更後: {NoteId} → {Mode} ExStyle=0x{ExStyle:X8}",
-            Model.NoteId, transparent ? "非干渉（透過）" : "編集（操作可能）", newExStyle);
+        Log.Information("SetClickThrough: {NoteId} → {Mode}",
+            Model.NoteId, transparent ? "非干渉" : "編集");
+    }
+
+    // ==========================================
+    //  Phase 3: 選択状態管理 + UI表示制御
+    // ==========================================
+
+    /// <summary>
+    /// 選択状態を設定する（NoteManager から呼ばれる）
+    /// </summary>
+    public void SetSelected(bool selected)
+    {
+        if (IsSelected == selected) return;
+        IsSelected = selected;
+        UpdateVisualState();
+    }
+
+    /// <summary>
+    /// 編集モード状態を設定する（NoteManager から呼ばれる）
+    /// </summary>
+    public void SetInEditMode(bool editMode)
+    {
+        if (IsInEditMode == editMode) return;
+        IsInEditMode = editMode;
+        UpdateVisualState();
+    }
+
+    /// <summary>
+    /// 選択状態・編集モードに応じてUI要素の表示を更新する
+    /// - 編集ON + 選択中: ツールバー、下部アイコン、選択枠/影 を表示
+    /// - 編集ON + 未選択: 本文のみ（枠なし）
+    /// - 編集OFF: すべてのUI要素を非表示（本文のみ）
+    /// </summary>
+    private void UpdateVisualState()
+    {
+        var showUI = IsInEditMode && IsSelected;
+
+        // ツールバー + 下部アイコン
+        ToolbarArea.Visibility = showUI ? Visibility.Visible : Visibility.Collapsed;
+        BottomBar.Visibility = showUI ? Visibility.Visible : Visibility.Collapsed;
+
+        // 選択枠 + 影
+        if (showUI)
+        {
+            NoteBorder.BorderBrush = SelectedBorderBrush;
+            NoteBorder.Effect = SelectedShadow;
+        }
+        else
+        {
+            NoteBorder.BorderBrush = Brushes.Transparent;
+            NoteBorder.Effect = null;
+        }
+    }
+
+    // ==========================================
+    //  Phase 3: ドラッグ移動 + ボタン操作
+    // ==========================================
+
+    /// <summary>
+    /// ツールバー領域のドラッグでウィンドウを移動する（P3-2）
+    /// </summary>
+    private void ToolbarArea_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Pressed)
+        {
+            DragMove();
+        }
+    }
+
+    /// <summary>
+    /// 削除ボタンクリック（P3-5）
+    /// </summary>
+    private void DeleteButton_Click(object sender, RoutedEventArgs e)
+    {
+        DeleteRequested?.Invoke(Model.NoteId);
+    }
+
+    /// <summary>
+    /// 複製ボタンクリック（P3-6）
+    /// </summary>
+    private void DuplicateButton_Click(object sender, RoutedEventArgs e)
+    {
+        DuplicateRequested?.Invoke(Model.NoteId);
+    }
+
+    /// <summary>
+    /// ウィンドウがアクティブ化された時（クリックなど）
+    /// 編集モード中であれば NoteManager に選択を通知する
+    /// </summary>
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+
+        if (IsInEditMode)
+        {
+            NoteActivated?.Invoke(Model.NoteId);
+        }
     }
 }
