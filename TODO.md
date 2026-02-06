@@ -63,38 +63,36 @@
 
 ---
 
-## Phase 0: プロジェクト基盤
+## Phase 0: プロジェクト基盤 ✅ (2026-02-06 完了)
 > 目標: ビルド可能なソリューション + アーキテクチャ骨格 + 安全装置
 
-- [ ] P0-1: .NET 8 WPF ソリューション作成（TopFusen.sln）
+- [x] P0-1: .NET 8 WPF ソリューション作成（TopFusen.sln）(2026-02-06 完了)
   - TopFusen（実行プロジェクト / WPF Application）
   - フォルダ構成: Models/, Views/, ViewModels/, Services/, Interop/, Assets/
-- [ ] P0-2: app.manifest 作成（PerMonitorV2 DPI宣言 + UAC=asInvoker）
-- [ ] P0-3: App.xaml で ShutdownMode=OnExplicitShutdown 設定
-- [ ] P0-4: DI コンテナ導入（Microsoft.Extensions.DependencyInjection）
-- [ ] P0-5: ログ基盤構築（Serilog → ファイル出力、7日ローテーション）
+- [x] P0-2: app.manifest 作成（PerMonitorV2 DPI宣言 + UAC=asInvoker）(2026-02-06 完了)
+- [x] P0-3: App.xaml で ShutdownMode=OnExplicitShutdown 設定 (2026-02-06 完了)
+- [x] P0-4: DI コンテナ導入（Microsoft.Extensions.DependencyInjection + Hosting）(2026-02-06 完了)
+- [x] P0-5: ログ基盤構築（Serilog → ファイル出力、7日ローテーション）(2026-02-06 完了)
   - 出力先: %LocalAppData%\TopFusen\TopFusen\logs\app_yyyyMMdd.log
-- [ ] P0-6: 設定モデル定義（AppSettings / NoteModel）
+- [x] P0-6: 設定モデル定義（AppSettings / NoteModel）(2026-02-06 完了)
   - NoteId: GUID
   - Placement（RelativeX/Y, DipX/Y, DipWidth/DipHeight, DpiScale）※DJ-3 反映
   - MonitorIdentity（DevicePath, NameFallback）
   - Style（BgPaletteCategoryId, BgColorId, Opacity0to100, TextColor, FontFamilyName）
   - AppSettings（IsHidden, Hotkey, FontAllowList, ZOrderByDesktop）
-- [ ] P0-7: Git リポジトリ初期化 + .gitignore（dotnet テンプレート）
-- [ ] P0-8: README.md 作成（プロジェクト概要 + ビルド手順）
-- [ ] **P0-9: 単一インスタンス制御（Mutex + IPC）** ← NEW
+- [x] P0-7: .gitignore 作成 (2026-02-06 完了)
+- [x] P0-8: README.md 作成（プロジェクト概要 + ビルド手順）(2026-02-06 完了)
+- [x] **P0-9: 単一インスタンス制御（Mutex + IPC）** (2026-02-06 完了)
   - 名前付き Mutex でプロセス重複検知
   - 2重起動時: 既存プロセスに NamedPipe で「設定を開く」コマンドを送り、新プロセスは終了
   - 根拠: 自動起動 + 手動起動の二重起動でトレイ重複・保存ファイル競合を防止
-- [ ] **P0-10: トレイ実装方式を確定** ← NEW
-  - 候補1: H.NotifyIcon（旧 Hardcodet.NotifyIcon.Wpf の後継、.NET 8 対応）
-  - 候補2: System.Windows.Forms.NotifyIcon（最悪のフォールバック）
-  - NuGet パッケージ名・バージョンを確定してから P1 へ進む
-- [ ] **P0-VERIFY: Phase 0 検証**
-  - [ ] ソリューションがビルドできる（エラー0）
-  - [ ] アプリが起動して即終了する（空のWPFアプリとして）
-  - [ ] ログファイルが所定パスに生成される
-  - [ ] **2回起動しても2つ目が即終了し、トレイが増えない** ← NEW
+- [x] **P0-10: トレイ実装方式を確定 → H.NotifyIcon.Wpf 2.1.3** (2026-02-06 完了)
+  - H.NotifyIcon.Wpf 2.1.3（net8.0-windows10.0.17763 互換確認済み）
+- [x] **P0-VERIFY: Phase 0 検証** (2026-02-06 完了)
+  - [x] ソリューションがビルドできる（エラー0、警告0）
+  - [x] アプリが起動してトレイ常駐する（ShutdownMode=OnExplicitShutdown）
+  - [x] ログファイルが所定パスに生成される（全7行の起動ログ確認済み）
+  - [x] **2回起動しても2つ目が即終了し、IPCコマンド送受信成功**
 
 ---
 
@@ -583,7 +581,7 @@
 
 | Phase | 内容 | 状態 |
 |-------|------|------|
-| Phase 0 | プロジェクト基盤 | 未着手 |
+| Phase 0 | プロジェクト基盤 | ✅ 完了 (2026-02-06) |
 | Phase 1 | トレイ常駐 + 最小付箋 | 未着手 |
 | Phase 2 | Win32 Interop + モード切替 | 未着手 |
 | Phase 3 | 移動・リサイズ + 基本UI | 未着手 |

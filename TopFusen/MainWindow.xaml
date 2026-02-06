@@ -1,0 +1,9 @@
+<Window x:Class="TopFusen.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TopFusen" Height="200" Width="350"
+        WindowStartupLocation="CenterScreen"
+        Visibility="Collapsed">
+    <!-- Phase 0: メインウィンドウは使用しない（トレイ常駐のため） -->
+    <!-- Phase 1 以降でこのウィンドウは不要になる予定 -->
+</Window>

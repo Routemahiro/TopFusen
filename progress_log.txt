@@ -1,0 +1,58 @@
+=== TopFusen 実装進捗ログ ===
+
+--- 2026-02-06 Phase 0: プロジェクト基盤 ---
+
+[完了] P0-1: .NET 8 WPF ソリューション作成
+  - dotnet new wpf -n TopFusen で WPF プロジェクト生成
+  - dotnet new sln で TopFusen.sln 作成
+  - フォルダ構成: Models/, Views/, ViewModels/, Services/, Interop/, Assets/
+  - TargetFramework: net8.0-windows10.0.17763.0
+
+[完了] P0-2: app.manifest
+  - PerMonitorV2 DPI Awareness 宣言
+  - UAC = asInvoker（管理者権限不要）
+  - Windows 10/11 互換性宣言
+
+[完了] P0-3: App.xaml — ShutdownMode=OnExplicitShutdown
+
+[完了] P0-4: DI コンテナ
+  - Microsoft.Extensions.DependencyInjection 8.0.1
+  - Microsoft.Extensions.Hosting 8.0.1
+  - App.xaml.cs の ConfigureServices で登録
+
+[完了] P0-5: Serilog ログ基盤
+  - Serilog 4.2.0 + Serilog.Sinks.File 6.0.0 + Serilog.Extensions.Hosting 8.0.0
+  - 出力先: %LocalAppData%\TopFusen\TopFusen\logs\app_yyyyMMdd.log
+  - ローテーション: 7日分保持
+  - 起動時に全7行のログ出力を確認済み
+
+[完了] P0-6: モデル定義
+  - NoteModel.cs: NoteId(GUID), MonitorIdentity, NotePlacement(DJ-3準拠), NoteStyle
+  - AppSettings.cs: IsHidden, HotkeySettings, FontAllowList, ZOrderByDesktop
+  - NotesData.cs: notes.json のルートオブジェクト
+
+[完了] P0-7: .gitignore（dotnet + VS + Rider テンプレート）
+
+[完了] P0-8: README.md（プロジェクト概要 + ビルド手順 + 構成図）
+
+[完了] P0-9: 単一インスタンス制御
+  - SingleInstanceService.cs: Mutex + NamedPipe IPC
+  - 二重起動テスト: 2番目のプロセスが即終了 + IPC コマンド送受信成功
+
+[完了] P0-10: トレイ実装方式確定
+  - H.NotifyIcon.Wpf 2.1.3 を採用（net8.0-windows10.0.17763 互換）
+  - 2.4.1 は NU1701 警告が出るため 2.1.3 を採用
+
+[検証] P0-VERIFY: 全項目合格
+  ✅ ビルド成功（エラー0、警告0）
+  ✅ アプリ起動 → ShutdownMode=OnExplicitShutdown で常駐
+  ✅ ログファイル生成確認（app_20260206.log）
+  ✅ 二重起動テスト成功（Mutex排他 + IPC通信）
+
+NuGet パッケージ一覧:
+  - Microsoft.Extensions.DependencyInjection 8.0.1
+  - Microsoft.Extensions.Hosting 8.0.1
+  - Serilog 4.2.0
+  - Serilog.Sinks.File 6.0.0
+  - Serilog.Extensions.Hosting 8.0.0
+  - H.NotifyIcon.Wpf 2.1.3
