@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media.Imaging;
 using H.NotifyIcon;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
@@ -88,26 +87,18 @@ public partial class App : Application
 
     /// <summary>
     /// タスクトレイアイコンの初期化
+    /// XAML リソースから取得 → ContextMenu 設定 → ForceCreate() で shell に登録
     /// </summary>
     private void InitializeTrayIcon()
     {
-        _trayIcon = new TaskbarIcon
-        {
-            ToolTipText = "TopFusen — 付箋オーバーレイ",
-            ContextMenu = CreateTrayContextMenu()
-        };
+        // App.xaml で定義した TaskbarIcon リソースを取得
+        _trayIcon = (TaskbarIcon)FindResource("TrayIcon");
+        _trayIcon.ContextMenu = CreateTrayContextMenu();
 
-        // アイコンの設定（pack URI でリソースから読み込み）
-        try
-        {
-            _trayIcon.IconSource = new BitmapImage(
-                new Uri("pack://application:,,,/Assets/app.ico"));
-            Log.Information("トレイアイコンを初期化しました");
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "トレイアイコンの読み込みに失敗。デフォルトで続行します");
-        }
+        // ForceCreate() で shell notification icon を確実に作成
+        _trayIcon.ForceCreate();
+
+        Log.Information("トレイアイコンを初期化しました（ForceCreate 完了）");
     }
 
     /// <summary>
