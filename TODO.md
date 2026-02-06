@@ -201,11 +201,12 @@
 
 ---
 
-## Phase 3.5: 仮想デスクトップ 技術スパイク ← NEW Phase
+## Phase 3.5: 仮想デスクトップ 技術スパイク 🔧 (作業中)
 > 目標: 仮想デスクトップ API の成立を早期検証する（Phase 8 の前倒しリスク軽減）
 > ※ 本格実装は Phase 8。ここでは「使えるか」「どう使うか」を検証するだけ
+> 実装方針: **案B（全API検証 + VirtualDesktopService分離 + トレイ検証メニュー）**
 
-- [ ] P3.5-1: COM Interop — IVirtualDesktopManager の初期化成立確認
+- [x] P3.5-1: COM Interop — IVirtualDesktopManager の初期化成立確認 (作業中)
   - CLSID_VirtualDesktopManager の CoCreateInstance
   - 失敗時の graceful 無効化パス
 - [ ] P3.5-2: 現在デスクトップID取得（短命ウィンドウ方式）の実証
@@ -599,7 +600,7 @@
 | Phase 1 | トレイ常駐 + 最小付箋 | ✅ 完了 (2026-02-06) |
 | Phase 2 | Win32 Interop + モード切替 | ✅ 完了 (2026-02-06) |
 | Phase 3 | 移動・リサイズ + 基本UI | ✅ 完了 (2026-02-07) |
-| Phase 3.5 | 仮想デスクトップ技術スパイク | 未着手 |
+| Phase 3.5 | 仮想デスクトップ技術スパイク | 🔧 作業中 |
 | Phase 4 | リッチテキスト編集 | 未着手 |
 | Phase 5 | 永続化 | 未着手 |
 | Phase 6 | 見た目・スタイル | 未着手 |
