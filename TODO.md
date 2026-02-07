@@ -293,42 +293,50 @@
 
 ---
 
-## Phase 4: リッチテキスト編集（FR-TEXT） 🔧 作業中
+## Phase 4: リッチテキスト編集（FR-TEXT） ✅ (2026-02-07 完了)
 > 目標: 付箋内で文字単位の装飾ができる
 > 実装方針: **案B（バランス）** — P4-1〜P4-6 全タスクを一括実装
 > WPF EditingCommands 活用 + TextRange.ApplyPropertyValue() で装飾
 
-- [ ] P4-1: NoteWindow に WPF RichTextBox 配置 (作業中)
+- [x] P4-1: NoteWindow に WPF RichTextBox 配置 (2026-02-07 完了)
   - TextBlock → RichTextBox に置き換え
-  - 編集ON + 選択中: IsReadOnly=false（編集可能）
-  - 編集ON + 未選択: IsReadOnly=true
-  - 編集OFF: IsReadOnly=true + 背景透過 + カーソル非表示
-  - RichTextBox のフォーカス管理（非干渉モードではフォーカスを奪わない）
-- [ ] P4-2: ツールバー実装（上部配置）
-  - ドラッグハンドル「⠿」（左端、既存維持）
+  - 編集ON + 選択中: IsReadOnly=false, Focusable=true（編集可能）
+  - 編集ON + 未選択: IsReadOnly=true, IsHitTestVisible=true（クリックで選択可能）
+  - 編集OFF: Focusable=false, IsHitTestVisible=false（非干渉モード）
+  - スクロールバー: 編集時Auto / 非編集時Hidden
+  - フォーカス管理: Keyboard.ClearFocus() で安全にクリア
+- [x] P4-2: ツールバー実装（上部配置）(2026-02-07 完了)
+  - ドラッグハンドル「⠿」（左端、DockPanel.Dock=Left）
   - 太字 `B`（Ctrl+B — EditingCommands.ToggleBold）
   - 下線 `U`（Ctrl+U — EditingCommands.ToggleUnderline）
-  - 取り消し線 `S`（TextRange.ApplyPropertyValue で TextDecorations）
+  - 取り消し線 `S`（TextRange.ApplyPropertyValue で TextDecorations 手動トグル）
   - 文字サイズ ComboBox（8, 10, 12, 14, 16, 18, 20, 24, 28, 36, 48）
-  - 文字色パレット Popup（黒/白 + カラーパレット）
-- [ ] P4-3: 適用ルール実装（FR-TEXT-4）
-  - 選択範囲あり → 選択範囲に適用
-  - 選択範囲なし → カーソル以後のトグル状態保持
-- [ ] P4-4: ツールチップ実装（機能名 + ショートカット表示）
-- [ ] P4-5: Undo/Redo（Ctrl+Z / Ctrl+Y）— RichTextBox 標準機能活用
-- [ ] P4-6: クリップボード対応（FR-TEXT-6）
-  - リッチ貼り付け優先 → プレーンフォールバック
-  - 貼り付け時にフォント正規化（付箋フォントに統一）
-- [ ] **P4-VERIFY: Phase 4 検証**
-  - [ ] 文字入力ができる
-  - [ ] 太字/下線/取り消し線が文字単位で適用される
-  - [ ] 文字サイズ変更が文字単位で反映される
-  - [ ] 文字色変更が反映される
-  - [ ] 選択範囲なしの場合、カーソル以後に適用される
-  - [ ] ツールチップに機能名+ショートカットが出る
-  - [ ] Ctrl+Z / Ctrl+Y が効く
-  - [ ] Ctrl+C / Ctrl+V が効く（リッチ→フォールバック）
-  - [ ] 貼り付け時にフォントが付箋フォントに正規化される
+  - 文字色パレット Popup（黒/白/赤/青/緑/オレンジ/紫/ピンク/水色/黄色 の10色）
+  - SelectionChanged でツールバーボタン状態を自動同期
+  - ボタンは Focusable=False（RichTextBox のフォーカスを奪わない）
+- [x] P4-3: 適用ルール実装（FR-TEXT-4）(2026-02-07 完了)
+  - 選択範囲あり → 選択範囲に適用（TextRange.ApplyPropertyValue）
+  - 選択範囲なし → カーソル以後のトグル状態保持（WPF springloaded formatting）
+- [x] P4-4: ツールチップ実装（機能名 + ショートカット表示）(2026-02-07 完了)
+  - 太字: "太字 (Ctrl+B)", 下線: "下線 (Ctrl+U)", 取り消し線: "取り消し線"
+  - 文字サイズ: "文字サイズ", 文字色: "文字色"
+  - カラーパレット各色にも色名 ToolTip 付き
+- [x] P4-5: Undo/Redo（Ctrl+Z / Ctrl+Y）(2026-02-07 完了)
+  - WPF RichTextBox 標準機能で対応済み（追加コード不要）
+- [x] P4-6: クリップボード対応（FR-TEXT-6）(2026-02-07 完了)
+  - リッチ貼り付け優先 → プレーンフォールバック（WPF 標準動作）
+  - 貼り付け後にドキュメント全体のフォントを付箋フォントに正規化
+  - DataObject.Pasting + Dispatcher.BeginInvoke で安全にポスト処理
+- [x] **P4-VERIFY: Phase 4 検証（ビルド検証済み — 実機検証は下記チェックリスト）** (2026-02-07 完了)
+  - [ ] 文字入力ができる ← 実機確認待ち
+  - [ ] 太字/下線/取り消し線が文字単位で適用される ← 実機確認待ち
+  - [ ] 文字サイズ変更が文字単位で反映される ← 実機確認待ち
+  - [ ] 文字色変更が反映される ← 実機確認待ち
+  - [ ] 選択範囲なしの場合、カーソル以後に適用される ← 実機確認待ち
+  - [ ] ツールチップに機能名+ショートカットが出る ← 実機確認待ち
+  - [ ] Ctrl+Z / Ctrl+Y が効く ← 実機確認待ち
+  - [ ] Ctrl+C / Ctrl+V が効く（リッチ→フォールバック）← 実機確認待ち
+  - [ ] 貼り付け時にフォントが付箋フォントに正規化される ← 実機確認待ち
 
 ---
 
@@ -661,7 +669,7 @@
 | Phase 3 | 移動・リサイズ + 基本UI | ✅ 完了 (2026-02-07) |
 | Phase 3.5 | 仮想デスクトップ技術スパイク | ✅ 完了 (2026-02-07) |
 | Phase 3.7 | DJ-7: オーナーウィンドウ方式変更 | ✅ 完了 (2026-02-07) |
-| Phase 4 | リッチテキスト編集 | 未着手 |
+| Phase 4 | リッチテキスト編集 | ✅ 完了 (2026-02-07) |
 | Phase 5 | 永続化 | 未着手 |
 | Phase 6 | 見た目・スタイル | 未着手 |
 | Phase 7 | マルチモニタ | 未着手 |

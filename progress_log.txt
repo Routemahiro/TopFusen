@@ -333,3 +333,53 @@ Phase 4〜7 の大量改修前に基盤変更を確定させるため、前倒�
     - Show() 後に NoteManager が SetInEditMode() / SetClickThrough() で実際の状態を適用
     - これにより Phase 8 の MoveWindowToDesktop は Show() と SetClickThrough() の間に挿入可能
   - ★実機検証: 編集ON/OFF どちらで作成しても VD移動成功 + UI表示も正常を確認済み
+
+==============================
+Phase 4: リッチテキスト編集（FR-TEXT）— 2026-02-07
+==============================
+
+[P4-1] NoteWindow に WPF RichTextBox 配置
+  - TextBlock → RichTextBox に置き換え
+  - 編集ON + 選択中: IsReadOnly=false, Focusable=true（テキスト編集可能）
+  - 編集ON + 未選択: IsReadOnly=true, IsHitTestVisible=true（クリックで選択可能）
+  - 編集OFF: Focusable=false, IsHitTestVisible=false（非干渉モード）
+  - スクロールバー: 編集時Auto / 非編集時Hidden
+  - WindowChrome.IsHitTestVisibleInChrome=True で WindowChrome との共存
+
+[P4-2] 装飾ツールバー実装
+  - ドラッグハンドル「⠿」(DockPanel.Dock=Left) + 装飾ボタン群(StackPanel)
+  - 太字 B: EditingCommands.ToggleBold（Ctrl+B 対応）
+  - 下線 U: EditingCommands.ToggleUnderline（Ctrl+U 対応）
+  - 取り消し線 S: TextRange.ApplyPropertyValue(Inline.TextDecorationsProperty) で手動トグル
+    ※ WPF EditingCommands に取り消し線がないため手動実装
+    ※ 混在装飾の場合、他の装飾が失われる可能性あり（v0.2 許容）
+  - 文字サイズ: ComboBox（8/10/12/14/16/18/20/24/28/36/48）
+    - DropDownClosed でフォーカスを RichTextBox に戻す
+  - 文字色: Button + Popup パレット（10色: 黒/白/赤/青/緑/オレンジ/紫/ピンク/水色/黄色）
+    - TextColorIndicator（ボタン下部の色バー）で現在色を表示
+  - SelectionChanged でツールバーボタン状態を自動同期（_isUpdatingToolbar フラグでフィードバック防止）
+  - 全ボタン Focusable=False（RichTextBox のフォーカスを奪わない設計）
+
+[P4-3] 適用ルール（FR-TEXT-4）
+  - WPF の springloaded formatting で自動対応（追加コード不要）
+  - 選択範囲あり → TextRange.ApplyPropertyValue で選択に適用
+  - 選択範囲なし → カーソル以後のトグル状態保持（WPF 内蔵）
+
+[P4-4] ツールチップ
+  - 全ボタンに ToolTip 属性: "太字 (Ctrl+B)", "下線 (Ctrl+U)", "取り消し線", "文字サイズ", "文字色"
+  - カラーパレット各色にも色名 ToolTip 付き
+
+[P4-5] Undo/Redo
+  - WPF RichTextBox 標準機能（Ctrl+Z / Ctrl+Y）で対応済み（追加コード不要）
+
+[P4-6] クリップボード + フォント正規化
+  - リッチ貼り付け優先 → プレーンフォールバック（WPF 標準動作）
+  - DataObject.Pasting イベント + Dispatcher.BeginInvoke(DispatcherPriority.Background) で
+    貼り付け完了後にドキュメント全体のフォントを付箋フォント（Model.Style.FontFamilyName）に正規化
+  - PRD: 「フォントは付箋単位」「貼り付けで異なるフォントは付箋フォントに正規化」
+
+[ビルド検証] ✅ エラー0、警告0、Lint クリーン
+
+変更ファイル:
+  - TopFusen/Views/NoteWindow.xaml（RichTextBox + 装飾ツールバー + 文字色パレットPopup）
+  - TopFusen/Views/NoteWindow.xaml.cs（装飾ロジック + ツールバー状態同期 + フォント正規化）
