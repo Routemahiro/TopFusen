@@ -1,3 +1,4 @@
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -58,6 +59,9 @@ public partial class NoteWindow : Window
     /// <summary>複製がリクエストされた</summary>
     public event Action<Guid>? DuplicateRequested;
 
+    /// <summary>付箋の内容または状態が変更された（テキスト/移動/リサイズ） — Phase 5</summary>
+    public event Action<Guid>? NoteChanged;
+
     // --- Win32 メッセージ定数 ---
     private const int WM_NCHITTEST = 0x0084;
     private const int HTTRANSPARENT = -1;
@@ -80,6 +84,14 @@ public partial class NoteWindow : Window
     /// WPF の springloaded formatting がボタンクリック時に維持されない問題への対策
     /// </summary>
     private readonly Dictionary<DependencyProperty, object> _pendingFormat = new();
+
+    // --- Phase 5: 変更追跡 ---
+
+    /// <summary>変更追跡が有効かどうか（初期化完了後に true にする）</summary>
+    private bool _isTrackingChanges;
+
+    /// <summary>RTF コンテンツ読み込み中フラグ（TextChanged 発火抑制用）</summary>
+    private bool _isLoadingContent;
 
     /// <summary>
     /// 付箋ウィンドウを生成する
@@ -105,6 +117,10 @@ public partial class NoteWindow : Window
 
         // HWND 生成後に Win32 拡張スタイルを適用
         SourceInitialized += OnSourceInitialized;
+
+        // Phase 5: ウィンドウ位置・サイズ変更の検知
+        LocationChanged += OnWindowLocationChanged;
+        SizeChanged += OnWindowSizeChanged;
     }
 
     // ==========================================
@@ -333,6 +349,9 @@ public partial class NoteWindow : Window
 
         // Phase 4 P4-6: 貼り付け時のフォント正規化
         DataObject.AddPastingHandler(NoteRichTextBox, OnPasting);
+
+        // Phase 5: テキスト変更の検知（デバウンス保存トリガー用）
+        NoteRichTextBox.TextChanged += OnRichTextBoxTextChanged;
     }
 
     // --- 保留書式のヘルパー ---
@@ -740,5 +759,118 @@ public partial class NoteWindow : Window
 
         Log.Debug("貼り付け後のフォント正規化: {NoteId} → {Font}",
             Model.NoteId, Model.Style.FontFamilyName);
+    }
+
+    // ==========================================
+    //  Phase 5: 永続化連携
+    // ==========================================
+
+    /// <summary>
+    /// 変更追跡を有効にする（NoteManager が初期化完了後に呼ぶ）
+    /// 初期化中の LocationChanged / SizeChanged / TextChanged で不要な保存が走るのを防ぐ
+    /// </summary>
+    public void EnableChangeTracking()
+    {
+        _isTrackingChanges = true;
+    }
+
+    /// <summary>
+    /// RichTextBox の内容を RTF バイト配列として取得する
+    /// </summary>
+    public byte[] GetRtfBytes()
+    {
+        try
+        {
+            var range = new TextRange(
+                NoteRichTextBox.Document.ContentStart,
+                NoteRichTextBox.Document.ContentEnd);
+            using var ms = new MemoryStream();
+            range.Save(ms, DataFormats.Rtf);
+            return ms.ToArray();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "RTF バイト取得失敗: {NoteId}", Model.NoteId);
+            return Array.Empty<byte>();
+        }
+    }
+
+    /// <summary>
+    /// RTF バイト配列から RichTextBox の内容を復元する
+    /// TextChanged イベントは抑制される（_isLoadingContent フラグ）
+    /// </summary>
+    public void LoadRtfBytes(byte[] rtfContent)
+    {
+        if (rtfContent.Length == 0) return;
+
+        _isLoadingContent = true;
+        try
+        {
+            var range = new TextRange(
+                NoteRichTextBox.Document.ContentStart,
+                NoteRichTextBox.Document.ContentEnd);
+            using var ms = new MemoryStream(rtfContent);
+            range.Load(ms, DataFormats.Rtf);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "RTF バイト読み込み失敗: {NoteId}", Model.NoteId);
+        }
+        finally
+        {
+            _isLoadingContent = false;
+        }
+    }
+
+    /// <summary>
+    /// ウィンドウの現在の位置・サイズを Model に同期する
+    /// </summary>
+    public void SyncModelFromWindow()
+    {
+        Model.Placement.DipX = Left;
+        Model.Placement.DipY = Top;
+        Model.Placement.DipWidth = ActualWidth > 0 ? ActualWidth : Width;
+        Model.Placement.DipHeight = ActualHeight > 0 ? ActualHeight : Height;
+    }
+
+    /// <summary>
+    /// RichTextBox の先頭行テキストを取得する（Z順一覧表示用）
+    /// </summary>
+    public string GetFirstLinePreview()
+    {
+        var doc = NoteRichTextBox.Document;
+        if (doc == null) return string.Empty;
+
+        var range = new TextRange(doc.ContentStart, doc.ContentEnd);
+        var text = range.Text.TrimStart();
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+
+        var firstLine = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                            .FirstOrDefault()?.Trim();
+        if (string.IsNullOrEmpty(firstLine)) return string.Empty;
+        return firstLine.Length > 50 ? firstLine[..50] + "…" : firstLine;
+    }
+
+    // --- 変更検知ハンドラ ---
+
+    private void OnWindowLocationChanged(object? sender, EventArgs e)
+    {
+        if (!_isTrackingChanges) return;
+        SyncModelFromWindow();
+        NoteChanged?.Invoke(Model.NoteId);
+    }
+
+    private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!_isTrackingChanges) return;
+        SyncModelFromWindow();
+        NoteChanged?.Invoke(Model.NoteId);
+    }
+
+    private void OnRichTextBoxTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_isTrackingChanges || _isLoadingContent) return;
+        Model.FirstLinePreview = GetFirstLinePreview();
+        NoteChanged?.Invoke(Model.NoteId);
     }
 }

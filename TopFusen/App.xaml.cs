@@ -26,6 +26,7 @@ public partial class App : Application
     private TaskbarIcon? _trayIcon;
     private NoteManager? _noteManager;
     private VirtualDesktopService? _vdService;
+    private PersistenceService? _persistence;
 
     /// <summary>編集モードメニュー項目（トグル表示更新用）</summary>
     private MenuItem? _editModeMenuItem;
@@ -70,18 +71,40 @@ public partial class App : Application
         // 5. SessionEnding フック（Windows ログオフ/シャットダウン時の保存）
         SessionEnding += OnSessionEnding;
 
-        // 6. NoteManager 初期化 + オーナーウィンドウ生成（DJ-7）
+        // 6. PersistenceService 取得（Phase 5）
+        _persistence = _serviceProvider.GetRequiredService<PersistenceService>();
+
+        // 7. NoteManager 初期化 + オーナーウィンドウ生成（DJ-7）
         _noteManager = _serviceProvider.GetRequiredService<NoteManager>();
         _noteManager.InitializeOwnerWindow();
 
-        // 7. 仮想デスクトップサービス初期化（Phase 3.5 スパイク / DJ-4: UIスレッドで初期化）
+        // 8. Phase 5: 保存データから付箋を復元（起動直後は編集OFF — FR-BOOT-2）
+        _noteManager.LoadAll();
+
+        // 9. Phase 5: 破損からの復旧通知
+        if (_persistence.CorruptionRecovered)
+        {
+            Log.Warning("設定ファイル破損を検知し、バックアップから復旧しました");
+            // トレイ初期化後にメッセージ表示（Dispatcher で遅延）
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,
+                new Action(() =>
+                {
+                    MessageBox.Show(
+                        _persistence.RecoveryMessage ?? "設定ファイルが破損していたため、バックアップから復旧しました。",
+                        "TopFusen — データ復旧通知",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }));
+        }
+
+        // 10. 仮想デスクトップサービス初期化（Phase 3.5 スパイク / DJ-4: UIスレッドで初期化）
         _vdService = _serviceProvider.GetRequiredService<VirtualDesktopService>();
         _vdService.Initialize();
 
-        // 8. タスクトレイアイコン初期化
+        // 11. タスクトレイアイコン初期化
         InitializeTrayIcon();
 
-        Log.Information("アプリケーション起動完了（Phase 3.5: トレイ常駐 + モード切替 + VDスパイク）");
+        Log.Information("アプリケーション起動完了（Phase 5: トレイ常駐 + モード切替 + 永続化 + VDスパイク）");
     }
 
     /// <summary>
@@ -90,6 +113,7 @@ public partial class App : Application
     private static void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<SingleInstanceService>();
+        services.AddSingleton<PersistenceService>();
         services.AddSingleton<NoteManager>();
         services.AddSingleton<VirtualDesktopService>();
     }
@@ -419,15 +443,21 @@ public partial class App : Application
     /// <summary>
     /// Windows セッション終了時（ログオフ/シャットダウン）
     /// </summary>
+    /// <summary>
+    /// Windows セッション終了時（ログオフ/シャットダウン）— Phase 5: 強制保存
+    /// </summary>
     private void OnSessionEnding(object sender, SessionEndingCancelEventArgs e)
     {
-        Log.Information("Windows セッション終了検知（理由: {Reason}）", e.ReasonSessionEnding);
-        // TODO: Phase 5 で永続化のフラッシュ保存を行う
+        Log.Information("Windows セッション終了検知（理由: {Reason}）— 保存フラッシュ実行", e.ReasonSessionEnding);
+        _persistence?.FlushSave();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         Log.Information("アプリケーション終了処理開始");
+
+        // Phase 5: 終了前に保存をフラッシュ（ウィンドウがまだ開いている間に）
+        _persistence?.FlushSave();
 
         // 全付箋ウィンドウを閉じる
         _noteManager?.CloseAllWindows();
@@ -438,6 +468,9 @@ public partial class App : Application
         // トレイアイコンの破棄
         _trayIcon?.Dispose();
         _trayIcon = null;
+
+        // PersistenceService の Dispose（デバウンスタイマー停止）
+        _persistence?.Dispose();
 
         _singleInstance?.Dispose();
         _serviceProvider?.Dispose();
