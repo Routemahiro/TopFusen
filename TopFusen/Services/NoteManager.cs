@@ -46,6 +46,9 @@ public class NoteManager
     /// <summary>現在の編集モード状態（false=非干渉、true=編集可能）</summary>
     public bool IsEditMode { get; private set; }
 
+    /// <summary>付箋が一時非表示中かどうか（永続化される）</summary>
+    public bool IsHidden => _appSettings.IsHidden;
+
     /// <summary>現在選択中の付箋ID（null=選択なし）</summary>
     public Guid? SelectedNoteId { get; private set; }
 
@@ -184,6 +187,70 @@ public class NoteManager
     }
 
     // ==========================================
+    //  Phase 10: 一時非表示管理（FR-HIDE）
+    // ==========================================
+
+    /// <summary>
+    /// 全付箋の一時非表示を切り替える（FR-HIDE-1）
+    /// hidden=true:  全付箋を Cloak（VD 関係なく全部隠す）
+    /// hidden=false: 現在 VD の付箋のみ Uncloak して再表示
+    /// FR-HIDE-3: 編集ON中に非表示を押した場合 → 強制的に編集OFFにして非表示
+    /// </summary>
+    public void SetHidden(bool hidden)
+    {
+        // FR-HIDE-3: 編集ON中に非表示 → 強制的に編集OFF
+        if (hidden && IsEditMode)
+        {
+            SetEditMode(false);
+        }
+
+        _appSettings.IsHidden = hidden;
+
+        if (hidden)
+        {
+            // 全付箋を Cloak（VD 関係なく全部）
+            foreach (var (_, window) in _notes)
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    VirtualDesktopService.CloakWindow(hwnd);
+                }
+            }
+            Log.Information("一時非表示: ON（{Count}枚を隠しました）", _notes.Count);
+        }
+        else
+        {
+            // FR-HIDE-3: 再表示しても編集はOFFのまま
+            // 現在 VD の付箋のみ Uncloak
+            var currentDesktop = _vdService.IsAvailable ? _vdService.GetCurrentDesktopIdFast() : null;
+
+            foreach (var (model, window) in _notes)
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                if (hwnd == IntPtr.Zero) continue;
+
+                var belongsHere = model.DesktopId == Guid.Empty
+                    || !currentDesktop.HasValue
+                    || model.DesktopId == currentDesktop.Value;
+
+                if (belongsHere)
+                {
+                    VirtualDesktopService.UncloakWindow(hwnd);
+                }
+                // 非現在VDの付箋は Cloak のまま（HandleDesktopSwitch が管理する）
+            }
+
+            // Z順を再適用
+            ApplyZOrder();
+
+            Log.Information("一時非表示: OFF（現在VDの付箋を再表示）");
+        }
+
+        _persistence.ScheduleSave();
+    }
+
+    // ==========================================
     //  選択状態管理（Phase 3）
     // ==========================================
 
@@ -294,7 +361,21 @@ public class NoteManager
         var validIds = new HashSet<Guid>(_notes.Select(n => n.Model.NoteId));
         _persistence.CleanupOrphanedRtfFiles(validIds);
 
-        Log.Information("付箋を復元しました（{Count}枚）", _notes.Count);
+        // 7. Phase 10: 非表示状態の復元（FR-HIDE-2: 非表示状態は再起動後も維持）
+        if (_appSettings.IsHidden)
+        {
+            foreach (var (_, window) in _notes)
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    VirtualDesktopService.CloakWindow(hwnd);
+                }
+            }
+            Log.Information("非表示状態を復元しました（全{Count}枚を Cloak）", _notes.Count);
+        }
+
+        Log.Information("付箋を復元しました（{Count}枚, IsHidden={IsHidden}）", _notes.Count, _appSettings.IsHidden);
     }
 
     /// <summary>
@@ -422,14 +503,28 @@ public class NoteManager
 
         window.Show();
 
-        // DJ-7/DJ-8: Show() 後に実際のモード状態を適用
-        if (IsEditMode)
+        // Phase 10: 非表示ON中は Cloak して見えなくする（仕様6.1）
+        if (_appSettings.IsHidden)
         {
-            window.SetInEditMode(true);
+            // Show() 後に即 Cloak（非表示中はモデルだけ作成して見せない）
+            window.SetClickThrough(true);
+            var hwnd = new WindowInteropHelper(window).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                VirtualDesktopService.CloakWindow(hwnd);
+            }
         }
         else
         {
-            window.SetClickThrough(true);
+            // DJ-7/DJ-8: Show() 後に実際のモード状態を適用
+            if (IsEditMode)
+            {
+                window.SetInEditMode(true);
+            }
+            else
+            {
+                window.SetClickThrough(true);
+            }
         }
 
         // Phase 9: Z順を適用（Show() 後に呼ぶこと）
@@ -441,11 +536,12 @@ public class NoteManager
         // Phase 5: 新規作成を即時保存スケジュール
         _persistence.ScheduleSave();
 
-        Log.Information("付箋を作成: {NoteId} (位置: {X:F0}, {Y:F0}, サイズ: {W:F0}x{H:F0}, モード: {Mode}, Owner={HasOwner})",
+        Log.Information("付箋を作成: {NoteId} (位置: {X:F0}, {Y:F0}, サイズ: {W:F0}x{H:F0}, モード: {Mode}, Hidden={Hidden}, Owner={HasOwner})",
             model.NoteId,
             model.Placement.DipX, model.Placement.DipY,
             model.Placement.DipWidth, model.Placement.DipHeight,
             IsEditMode ? "編集" : "非干渉",
+            _appSettings.IsHidden,
             _ownerWindow != null);
 
         return window;
@@ -627,6 +723,13 @@ public class NoteManager
     /// </summary>
     public void HandleDesktopSwitch(Guid currentDesktopId)
     {
+        // Phase 10: 非表示中は VD 切替の表示制御をスキップ（全付箋 Cloak のまま）
+        if (_appSettings.IsHidden)
+        {
+            Log.Debug("VD 切替検知（非表示中のためスキップ）: VD={DesktopId}", currentDesktopId);
+            return;
+        }
+
         // P8-6: VD 切替時に孤立付箋をリアルタイム救済
         //  （VD が削除された直後の切替イベントで検知して、即座に現在VDに付替える）
         var orphanedIds = _vdService.FindOrphanedDesktopIds(

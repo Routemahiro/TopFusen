@@ -57,4 +57,31 @@ internal static class NativeMethods
     internal const uint SWP_NOMOVE     = 0x0002;
     internal const uint SWP_NOSIZE     = 0x0001;
     internal const uint SWP_NOACTIVATE = 0x0010;
+
+    // ----- Phase 10: ホットキー（FR-HOTKEY）-----
+
+    /// <summary>
+    /// グローバルホットキーを登録する
+    /// 既定: Ctrl+Win+E → 編集モードトグル
+    /// </summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    /// <summary>
+    /// グローバルホットキーの登録を解除する
+    /// </summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    /// <summary>WM_HOTKEY メッセージ</summary>
+    internal const int WM_HOTKEY = 0x0312;
+
+    // Modifier keys for RegisterHotKey
+    internal const uint MOD_ALT     = 0x0001;
+    internal const uint MOD_CONTROL = 0x0002;
+    internal const uint MOD_SHIFT   = 0x0004;
+    internal const uint MOD_WIN     = 0x0008;
+    internal const uint MOD_NOREPEAT = 0x4000;
 }

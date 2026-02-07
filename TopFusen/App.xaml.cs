@@ -2,6 +2,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Media.Imaging;
 using H.NotifyIcon;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
@@ -17,7 +18,7 @@ namespace TopFusen;
 /// - DI コンテナによるサービス管理
 /// - Serilog によるログ出力
 /// - タスクトレイ常駐 + 付箋管理
-/// - Phase 3.5: 仮想デスクトップ技術スパイク
+/// - Phase 10: 一時非表示 + ホットキー + 自動起動
 /// </summary>
 public partial class App : Application
 {
@@ -27,9 +28,19 @@ public partial class App : Application
     private NoteManager? _noteManager;
     private VirtualDesktopService? _vdService;
     private PersistenceService? _persistence;
+    private HotkeyService? _hotkeyService;
 
     /// <summary>編集モードメニュー項目（トグル表示更新用）</summary>
     private MenuItem? _editModeMenuItem;
+
+    /// <summary>非表示メニュー項目（トグル表示更新用）</summary>
+    private MenuItem? _hideMenuItem;
+
+    /// <summary>ホットキーメニュー項目（ON/OFF表示更新用）</summary>
+    private MenuItem? _hotkeyMenuItem;
+
+    /// <summary>自動起動メニュー項目（ON/OFF表示更新用）</summary>
+    private MenuItem? _autoStartMenuItem;
 
     /// <summary>
     /// DI コンテナから取得したサービスプロバイダ
@@ -106,10 +117,31 @@ public partial class App : Application
         _vdService.DesktopChanged += OnDesktopChanged;
         _vdService.StartDesktopMonitoring();
 
-        // 11. タスクトレイアイコン初期化
+        // 12. タスクトレイアイコン初期化
         InitializeTrayIcon();
 
-        Log.Information("アプリケーション起動完了（Phase 8: トレイ常駐 + モード切替 + 永続化 + VD自前管理）");
+        // Phase 10: 非表示状態に応じてトレイアイコン外観を初期化
+        if (_noteManager.IsHidden)
+        {
+            UpdateTrayIconAppearance(true);
+        }
+
+        // 13. Phase 10: ホットキーサービス初期化
+        _hotkeyService = new HotkeyService();
+        _hotkeyService.HotkeyPressed += OnHotkeyPressed;
+        _hotkeyService.Initialize(_noteManager.OwnerHandle, _noteManager.AppSettings.Hotkey);
+
+        if (_hotkeyService.LastError != null)
+        {
+            Log.Warning("ホットキー登録エラー: {Error}", _hotkeyService.LastError);
+            // メニュー項目にエラー状態を反映
+            if (_hotkeyMenuItem != null)
+            {
+                _hotkeyMenuItem.Header = "⌨ ホットキー: エラー ⚠";
+            }
+        }
+
+        Log.Information("アプリケーション起動完了（Phase 10: トレイ常駐 + モード切替 + 永続化 + VD自前管理 + 非表示/ホットキー/自動起動）");
     }
 
     /// <summary>
@@ -137,7 +169,7 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// トレイ右クリックメニューの構築（FR-TRAY + Phase 3.5 スパイクメニュー）
+    /// トレイ右クリックメニューの構築（FR-TRAY + Phase 10）
     /// </summary>
     private ContextMenu CreateTrayContextMenu()
     {
@@ -145,16 +177,7 @@ public partial class App : Application
 
         // --- 編集モード ON/OFF（FR-TRAY-1）---
         _editModeMenuItem = new MenuItem { Header = "✏️ 編集モード: OFF" };
-        _editModeMenuItem.Click += (_, _) =>
-        {
-            if (_noteManager == null) return;
-
-            var newMode = !_noteManager.IsEditMode;
-            _noteManager.SetEditMode(newMode);
-            _editModeMenuItem.Header = newMode
-                ? "✏️ 編集モード: ON ✓"
-                : "✏️ 編集モード: OFF";
-        };
+        _editModeMenuItem.Click += (_, _) => ToggleEditMode();
         menu.Items.Add(_editModeMenuItem);
 
         // --- 新規付箋作成（FR-TRAY-2）---
@@ -167,19 +190,32 @@ public partial class App : Application
 
         menu.Items.Add(new Separator());
 
-        // --- 一時的に非表示（FR-TRAY-3）--- stub
-        var hideItem = new MenuItem { Header = "👁 一時的に非表示" };
-        hideItem.Click += (_, _) =>
+        // --- 一時的に非表示（FR-TRAY-3）--- Phase 10 実装
+        var isHidden = _noteManager?.IsHidden ?? false;
+        _hideMenuItem = new MenuItem
         {
-            Log.Information("一時非表示（未実装）");
+            Header = isHidden ? "👁 付箋を再表示" : "👁 一時的に非表示"
         };
-        menu.Items.Add(hideItem);
+        _hideMenuItem.Click += (_, _) =>
+        {
+            if (_noteManager == null) return;
+            var newHidden = !_noteManager.IsHidden;
+            _noteManager.SetHidden(newHidden);
+            _hideMenuItem.Header = newHidden ? "👁 付箋を再表示" : "👁 一時的に非表示";
+            // FR-HIDE-3: 非表示にしたら編集OFFになるので、メニュー表示を同期
+            if (newHidden)
+            {
+                _editModeMenuItem!.Header = "✏️ 編集モード: OFF";
+            }
+            // アイコンのグレー化
+            UpdateTrayIconAppearance(newHidden);
+        };
+        menu.Items.Add(_hideMenuItem);
 
         // --- Z順管理（Phase 9）---
         var zOrderItem = new MenuItem { Header = "📊 Z順管理..." };
         zOrderItem.Click += async (_, _) =>
         {
-            // トレイメニューが閉じるのを待つ
             await Task.Delay(200);
             if (_noteManager == null) return;
             var zOrderWindow = new Views.ZOrderWindow(_noteManager);
@@ -194,6 +230,53 @@ public partial class App : Application
             Log.Information("設定画面（未実装）");
         };
         menu.Items.Add(settingsItem);
+
+        menu.Items.Add(new Separator());
+
+        // --- Phase 10: ホットキー ON/OFF ---
+        var hotkeyEnabled = _noteManager?.AppSettings.Hotkey.Enabled ?? true;
+        _hotkeyMenuItem = new MenuItem
+        {
+            Header = hotkeyEnabled ? "⌨ ホットキー: ON (Ctrl+Win+E)" : "⌨ ホットキー: OFF"
+        };
+        _hotkeyMenuItem.Click += (_, _) =>
+        {
+            if (_noteManager == null || _hotkeyService == null) return;
+            var newEnabled = !_noteManager.AppSettings.Hotkey.Enabled;
+            _noteManager.AppSettings.Hotkey.Enabled = newEnabled;
+            _hotkeyService.UpdateSettings(_noteManager.AppSettings.Hotkey);
+            _hotkeyMenuItem.Header = newEnabled
+                ? "⌨ ホットキー: ON (Ctrl+Win+E)" : "⌨ ホットキー: OFF";
+            _persistence?.ScheduleSave();
+
+            if (newEnabled && _hotkeyService.LastError != null)
+            {
+                // 登録失敗時はメニュー表示でエラーを伝える
+                _hotkeyMenuItem.Header = "⌨ ホットキー: エラー ⚠";
+                Log.Warning("ホットキー再登録エラー: {Error}", _hotkeyService.LastError);
+            }
+        };
+        menu.Items.Add(_hotkeyMenuItem);
+
+        // --- Phase 10: 自動起動 ON/OFF ---
+        var autoStartEnabled = AutoStartService.IsEnabled();
+        _autoStartMenuItem = new MenuItem
+        {
+            Header = autoStartEnabled ? "🚀 自動起動: ON ✓" : "🚀 自動起動: OFF"
+        };
+        _autoStartMenuItem.Click += (_, _) =>
+        {
+            if (_noteManager == null) return;
+            var currentState = AutoStartService.IsEnabled();
+            var newState = !currentState;
+            if (AutoStartService.SetEnabled(newState))
+            {
+                _noteManager.AppSettings.AutoStartEnabled = newState;
+                _autoStartMenuItem.Header = newState ? "🚀 自動起動: ON ✓" : "🚀 自動起動: OFF";
+                _persistence?.ScheduleSave();
+            }
+        };
+        menu.Items.Add(_autoStartMenuItem);
 
         menu.Items.Add(new Separator());
 
@@ -222,6 +305,83 @@ public partial class App : Application
         menu.Items.Add(exitItem);
 
         return menu;
+    }
+
+    // ==========================================
+    //  Phase 10: 編集モードトグル（トレイ + ホットキー共通）
+    // ==========================================
+
+    /// <summary>
+    /// 編集モードをトグルする（トレイメニュー + ホットキー共通）
+    /// Phase 10: 非表示中はトグルしない（安全設計）
+    /// </summary>
+    private void ToggleEditMode()
+    {
+        if (_noteManager == null) return;
+
+        // 非表示中は編集ON不可（まず再表示してもらう）
+        if (_noteManager.IsHidden)
+        {
+            Log.Information("非表示中のため編集モードトグルをスキップ");
+            return;
+        }
+
+        var newMode = !_noteManager.IsEditMode;
+        _noteManager.SetEditMode(newMode);
+        _editModeMenuItem!.Header = newMode
+            ? "✏️ 編集モード: ON ✓"
+            : "✏️ 編集モード: OFF";
+    }
+
+    /// <summary>
+    /// ホットキー押下ハンドラ
+    /// </summary>
+    private void OnHotkeyPressed()
+    {
+        Dispatcher.Invoke(ToggleEditMode);
+    }
+
+    // ==========================================
+    //  Phase 10: トレイアイコン外観制御
+    // ==========================================
+
+    /// <summary>
+    /// 非表示状態に応じてトレイアイコンの外観を変更する
+    /// 非表示ON: グレーアイコンに差し替え + ToolTip 変更
+    /// 非表示OFF: 通常アイコンに戻す
+    /// </summary>
+    private void UpdateTrayIconAppearance(bool isHidden)
+    {
+        if (_trayIcon == null) return;
+
+        if (isHidden)
+        {
+            _trayIcon.ToolTipText = "TopFusen — 付箋非表示中";
+            // グレーアイコンがあれば差し替え、なければ ToolTip のみで視認性を出す
+            try
+            {
+                var grayIcon = new Uri("pack://application:,,,/Assets/app_gray.ico");
+                _trayIcon.IconSource = new BitmapImage(grayIcon);
+            }
+            catch
+            {
+                // グレーアイコンが無い場合はスキップ（ToolTip で視認）
+                Log.Debug("グレーアイコンが見つかりません（ToolTip のみで対応）");
+            }
+        }
+        else
+        {
+            _trayIcon.ToolTipText = "TopFusen — 付箋オーバーレイ";
+            try
+            {
+                var normalIcon = new Uri("pack://application:,,,/Assets/app.ico");
+                _trayIcon.IconSource = new BitmapImage(normalIcon);
+            }
+            catch
+            {
+                Log.Debug("通常アイコン復帰に失敗");
+            }
+        }
     }
 
     // ==========================================
@@ -429,6 +589,9 @@ public partial class App : Application
 
         // Phase 5: 終了前に保存をフラッシュ（ウィンドウがまだ開いている間に）
         _persistence?.FlushSave();
+
+        // Phase 10: ホットキー解放
+        _hotkeyService?.Dispose();
 
         // 全付箋ウィンドウを閉じる
         _noteManager?.CloseAllWindows();
