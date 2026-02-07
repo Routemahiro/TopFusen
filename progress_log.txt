@@ -323,3 +323,13 @@ Phase 4〜7 の大量改修前に基盤変更を確定させるため、前倒�
   - TopFusen/Services/NoteManager.cs（オーナーウィンドウ生成・管理 + Owner 設定）
   - TopFusen/Views/NoteWindow.xaml.cs（WS_EX_TOOLWINDOW 除去 + コメント更新）
   - TopFusen/App.xaml.cs（InitializeOwnerWindow 呼び出し追加）
+
+設計判断追加:
+  - DJ-8: WS_EX_TRANSPARENT/NOACTIVATE も生成時に付けると仮想デスクトップ追跡外
+    - 追加テストで発見: 編集OFF（TRANSPARENT+NOACTIVATE付き）で作成した付箋は MoveWindowToDesktop が効かない
+    - 後から外しても手遅れ（OS が生成時にウィンドウの追跡可否を決定する）
+    - 対策: NoteWindow を常に「クリーン」で生成 → Show() 後に SetClickThrough() で適用
+    - NoteWindow のコンストラクタでも IsInEditMode=false 固定（安全な初期状態）
+    - Show() 後に NoteManager が SetInEditMode() / SetClickThrough() で実際の状態を適用
+    - これにより Phase 8 の MoveWindowToDesktop は Show() と SetClickThrough() の間に挿入可能
+  - ★実機検証: 編集ON/OFF どちらで作成しても VD移動成功 + UI表示も正常を確認済み
