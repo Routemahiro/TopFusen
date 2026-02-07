@@ -501,3 +501,63 @@ DJ-9: クリック透過を WM_NCHITTEST 単独制御に変更 — 2026-02-07
 変更ファイル:
   - TopFusen/Views/NoteWindow.xaml.cs（SetClickThrough 簡素化 + OnSourceInitialized 修正）
   - TODO.md（DJ-9 設計判断追記）
+
+==============================
+Phase 8.0: VD 自前管理 技術スパイク（DJ-10）— 2026-02-07
+==============================
+
+背景: リサーチ AI による詳細調査の結果、以下が確定した：
+  - WS_EX_TRANSPARENT なしでクロスプロセスクリック透過は不可能（背景不透明の場合）
+  - WM_NCHITTEST → HTTRANSPARENT はクロスプロセスでは効かない（MS公式注記: 同一スレッド内）
+  - EVENT_SYSTEM_DESKTOPSWITCH は仮想デスクトップ切替には使えない（Winlogon用）
+  - 未公開COM通知はGUID変更リスク大（Win11 23H2で実際に発生）
+
+DJ-10 方針: WS_EX_TRANSPARENT + DWMWA_CLOAK + DispatcherTimer ポーリング
+  - クリック透過: WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WM_NCHITTEST の三重制御を復活
+  - VD管理: OS のVD追跡に頼らず自前管理
+  - 表示制御: DWMWA_CLOAK（DWM Cloak）でウィンドウの表示/非表示
+  - 切替検知: DispatcherTimer 300ms ポーリング（Phase 8 でレジストリ監視に昇格予定）
+  - 編集モード遷移: Cloak先行 → WS_EX_TRANSPARENT 付与（ちらつき対策）
+
+[P8.0-1] NativeMethods 拡張
+  - DwmSetWindowAttribute + DWMWA_CLOAK（P/Invoke）
+  - SetWindowPos + HWND_TOPMOST + SWP_* 定数
+
+[P8.0-2] VD Tracker Window 実装
+  - WS_EX_TRANSPARENT なしの常駐HWND（1x1, 画面外, Opacity=0）
+  - IsWindowOnCurrentVirtualDesktop による高速チェック（COM 1回）
+  - Registry CurrentVirtualDesktop 読み出し（中速パス）
+  - 短命ウィンドウ方式（低速パス/フォールバック）
+
+[P8.0-3] DWMWA_CLOAK による Cloak/Uncloak
+  - CloakWindow: DwmSetWindowAttribute(DWMWA_CLOAK, 1)
+  - UncloakWindow: DwmSetWindowAttribute(DWMWA_CLOAK, 0) + SetWindowPos(TOPMOST) 再主張
+
+[P8.0-4] DispatcherTimer ポーリング
+  - 300ms 間隔で GetCurrentDesktopIdFast → 変化があれば DesktopChanged イベント発火
+  - 最適化: 前回IDと同じならスキップ（高速パス: COM 1回）
+
+[P8.0-5] WS_EX_TRANSPARENT 復活（DJ-9 撤回）
+  - NoteWindow.SetClickThrough: Win32 スタイル操作を復元
+  - OnSourceInitialized: 生成時はクリーン（DJ-8 維持）、Show() 後に適用
+
+[P8.0-6] NoteManager VD 統合
+  - CreateNote: 現在の DesktopId を付与
+  - RestoreNote: DesktopId チェック → 非現在VD は Cloak
+  - HandleDesktopSwitch: VD切替時に Cloak/Uncloak
+  - SetEditMode: DJ-10 遷移シーケンス（Cloak先行/Uncloak後行）
+
+[P8.0-7/8] App.xaml.cs 統合 + デバッグメニュー
+  - VD Tracker 初期化 → デスクトップ監視開始
+  - DesktopChanged → NoteManager.HandleDesktopSwitch
+  - デバッグメニュー: Cloak/Uncloak テスト, 全付箋VD状態表示
+
+[ビルド検証] ✅ エラー0、警告0
+
+変更ファイル:
+  - TopFusen/Interop/NativeMethods.cs（DwmSetWindowAttribute, SetWindowPos 追加）
+  - TopFusen/Services/VirtualDesktopService.cs（Tracker + Cloak + ポーリング + Registry読出）
+  - TopFusen/Views/NoteWindow.xaml.cs（DJ-10: WS_EX_TRANSPARENT 復活）
+  - TopFusen/Services/NoteManager.cs（VD統合: DesktopId付与/Cloak/HandleDesktopSwitch）
+  - TopFusen/App.xaml.cs（Tracker初期化 + 監視開始 + DesktopChanged + デバッグメニュー）
+  - TODO.md（DJ-10 + Phase 8.0 追加）
