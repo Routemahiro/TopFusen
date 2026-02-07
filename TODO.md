@@ -585,29 +585,41 @@
 
 ---
 
-## Phase 9: Z順管理（FR-ZORDER）
-> 目標: 設定画面で付箋の前後関係をD&Dで変更でき、クリックで崩れない
+## Phase 9: Z順管理（FR-ZORDER）✅ (2026-02-07 完了)
+> 目標: 付箋の前後関係をD&Dで変更でき、クリックで崩れない
+> 実装方針: **案C（積極的）** — GongSolutions.Wpf.DragDrop 4.0.0 による本格D&D + Z順ロジック一括実装
 
-- [ ] **P9-0: Z順固定ポリシーの実装** ← NEW（DJ-2 反映）
+- [x] **P9-0: Z順固定ポリシーの実装**（DJ-2 反映）(2026-02-07 完了)
   - ポリシー: クリック/アクティブ化で Z順を変えない（設定D&Dのみ）
-  - NoteWindow の Activated / GotFocus イベントで Z順を再適用
-  - 全 NoteWindow を ZOrderByDesktop の順序どおりに SetWindowPos し直す
+  - NoteManager.OnNoteActivated → SelectNote + ApplyZOrder で Z順を即座に再適用
+  - SetEditMode / HandleDesktopSwitch 後にも ApplyZOrder 呼び出し
   - ※ 編集モード中のみ発火（非干渉モードではそもそもアクティブ化しない）
-- [ ] P9-1: ZOrderByDesktop データ管理（Dictionary<Guid, List<NoteId>>）
-- [ ] P9-2: SetWindowPos による TopMost 内 Z順再構築
-  - 後ろ→前の順に挿入で適用
-- [ ] P9-3: 設定画面 — Z順一覧UI
-  - ドラッグハンドル「＝」+ 1行目テキスト表示
-  - 空なら「（空）」、長文は末尾省略
-- [ ] P9-4: D&D 並び替え → 即時反映
-- [ ] P9-5: 仮想デスクトップ単位の Z順分離
+- [x] P9-1: ZOrderByDesktop データ管理（Dictionary<Guid, List<NoteId>>）(2026-02-07 完了)
+  - AddToZOrder / RemoveFromZOrder / SyncZOrderList / SyncAllZOrderLists
+  - CreateNote / DeleteNote / DuplicateNote で自動連携
+  - LoadAll 後に SyncAllZOrderLists で整合性確保
+- [x] P9-2: SetWindowPos による TopMost 内 Z順再構築 (2026-02-07 完了)
+  - ApplyZOrder(): 末尾→先頭の順に HWND_TOPMOST で配置（最後=最前面）
+  - SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE フラグ
+- [x] P9-3: Z順管理ウィンドウ（トレイメニューから開く）(2026-02-07 完了)
+  - GongSolutions.Wpf.DragDrop 4.0.0 による D&D 並び替え
+  - ドラッグハンドル「⠿」+ 背景色カラーインジケータ + 1行目テキスト表示
+  - 空なら「（空）」、長文は末尾省略（50文字 + …）
+  - トレイメニュー「📊 Z順管理...」から ShowDialog
+- [x] P9-4: D&D 並び替え → 即時反映 (2026-02-07 完了)
+  - ObservableCollection.CollectionChanged + DispatcherPriority.Background でデバウンス
+  - NoteManager.UpdateZOrder() → ApplyZOrder() + ScheduleSave()
+- [x] P9-5: 仮想デスクトップ単位の Z順分離 (2026-02-07 完了)
+  - ZOrderByDesktop のキーが DesktopId
+  - ZOrderWindow は現在デスクトップの付箋のみ表示
+  - HandleDesktopSwitch 後に切替先 VD の Z順を適用
 - [ ] **P9-VERIFY: Phase 9 検証**
-  - [ ] 設定画面で並び替えると付箋の前後が即時変わる
+  - [ ] Z順管理画面で並び替えると付箋の前後が即時変わる
   - [ ] 一覧に1行目テキストが表示される（空は「（空）」）
   - [ ] 上が前面、下が背面の順になっている
   - [ ] Z順が再起動後も維持される
-  - [ ] **編集モードで付箋をクリックしても Z順が崩れない** ← NEW
-  - [ ] **複数付箋を交互にクリックしても設定した順序が維持される** ← NEW
+  - [ ] **編集モードで付箋をクリックしても Z順が崩れない**
+  - [ ] **複数付箋を交互にクリックしても設定した順序が維持される**
 
 ---
 
@@ -762,7 +774,7 @@
 | Phase 7 | マルチモニタ | 未着手 |
 | Phase 8.0 | VD 自前管理 技術スパイク | ✅ 完了 (2026-02-07) |
 | Phase 8 | 仮想デスクトップ | ✅ 完了 (2026-02-07) |
-| Phase 9 | Z順管理 | 未着手 |
+| Phase 9 | Z順管理 | ✅ 完了 (2026-02-07) |
 | Phase 10 | 非表示 + ホットキー + 自動起動 | 未着手 |
 | Phase 11 | 設定画面 | 未着手 |
 | Phase 12 | 統合テスト + 回帰テスト + ポリッシュ | 未着手 |

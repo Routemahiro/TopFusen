@@ -611,3 +611,39 @@ Phase 8.0 スパイク: 技術的実現性を確認。DJ-10 方式の有効性�
   - 詳細: 引き継ぎ資料置き場/後回し.md
 
 Phase 8 完了。次は Phase 6（見た目・スタイル）。
+
+========================================
+Phase 9: Z順管理（FR-ZORDER）— 2026-02-07
+========================================
+
+[P9-0] Z順固定ポリシー（DJ-2）
+  - NoteManager.OnNoteActivated() → SelectNote + ApplyZOrder で Z順を即座に再適用
+  - SetEditMode / HandleDesktopSwitch 後にも ApplyZOrder 呼び出し
+  - クリック/アクティブ化で Z順が崩れない
+
+[P9-1] ZOrderByDesktop データ管理
+  - AddToZOrder: 新規/複製付箋を最前面に追加
+  - RemoveFromZOrder: 削除時に全リストから除去
+  - SyncZOrderList: 実際の付箋とリストの整合性確保
+  - SyncAllZOrderLists: 起動時の全VD一括同期
+  - CreateNote / DeleteNote / DuplicateNote / LoadAll で自動連携
+
+[P9-2] SetWindowPos による Z順再構築
+  - ApplyZOrder(): 末尾→先頭の順に HWND_TOPMOST で配置
+  - SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE フラグ
+
+[P9-3] Z順管理ウィンドウ
+  - GongSolutions.Wpf.DragDrop 4.0.0 による D&D 並び替え
+  - ドラッグハンドル「⠿」+ 背景色カラーインジケータ + 1行目テキスト
+  - トレイメニュー「📊 Z順管理...」から ShowDialog
+
+[P9-4] D&D → 即時反映
+  - ObservableCollection.CollectionChanged + Dispatcher デバウンス
+  - NoteManager.UpdateZOrder() → ApplyZOrder() + ScheduleSave()
+
+[P9-5] 仮想デスクトップ単位の Z順分離
+  - ZOrderByDesktop のキーが DesktopId
+  - ZOrderWindow は現在VDの付箋のみ表示
+  - HandleDesktopSwitch 後に切替先VDの Z順を適用
+
+Phase 9 完了（ビルド成功・Lint クリーン）。次は Phase 10。
