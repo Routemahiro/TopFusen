@@ -222,3 +222,69 @@ NuGet パッケージ一覧:
   - TopFusen/Views/NoteWindow.xaml（WindowChrome + Grid 3行レイアウト + ツールバー + 下部アイコン）
   - TopFusen/Views/NoteWindow.xaml.cs（選択状態管理 + DragMove + イベント + UpdateVisualState）
   - TopFusen/Services/NoteManager.cs（選択管理 + 複製 + イベント連携 + 重なり検知）
+
+--- 2026-02-07 Phase 3.5: 仮想デスクトップ 技術スパイク ---
+
+実装方針: 案B（全API検証 + VirtualDesktopService分離 + トレイ検証メニュー）
+
+[完了] P3.5-1: COM Interop — IVirtualDesktopManager の初期化成立確認
+  - Interop/VirtualDesktopInterop.cs: COM インターフェース定義
+    - IVirtualDesktopManager（GUID: a5cd92ff-29be-454c-8d04-d82879fb3f1b）
+    - CLSID_VirtualDesktopManager（aa509086-5ca9-4c25-8f95-589d3c07b48a）
+    - メソッド: IsWindowOnCurrentVirtualDesktop, GetWindowDesktopId, MoveWindowToDesktop
+  - Services/VirtualDesktopService.cs: Initialize() で CoCreateInstance
+  - 結果: ✅ COM 初期化成功。IsAvailable=true
+  - graceful 無効化: try/catch で COMException を捕捉、IsAvailable=false に設定
+
+[完了] P3.5-2: 現在デスクトップID取得（短命ウィンドウ方式）
+  - 短命 Window（Width=1, Height=1, Opacity=0, Left=-32000）を作成
+  - GetWindowDesktopId で GUID 取得 → Window.Close()
+  - 結果: ✅ 正しいデスクトップ GUID が取得できた
+  - 注意: ShowActivated=false で他ウィンドウのフォーカスを奪わない
+
+[完了] P3.5-3: MoveWindowToDesktop テスト
+  - 普通の Window（WindowStyle=ToolWindow, ShowInTaskbar=true, Topmost=false）:
+    ✅ MoveWindowToDesktop 成功。DesktopId が正しく変更される
+  - NoteWindow（WS_EX_TOOLWINDOW + TOPMOST + LAYERED + TRANSPARENT + NOACTIVATE）:
+    ❌ MoveWindowToDesktop は HRESULT=0（成功）を返すが、実際には移動しない
+    ❌ GetWindowDesktopId が Guid.Empty を返す（OS がウィンドウを追跡していない）
+  - ★★★ 根本原因判明（DJ-7）: WS_EX_TOOLWINDOW（オーナーなし）のウィンドウは
+    仮想デスクトップ管理の対象外。OS がデスクトップ所属を追跡しない。
+  - 追加テスト:
+    - Topmost=false にしても変化なし
+    - WS_EX_TOOLWINDOW を外しても変化なし（一度追跡外れたら復帰しない）
+    - WS_EX_TRANSPARENT/NOACTIVATE を外しても変化なし
+    - Hide → Move → Show でも変化なし
+  - Phase 8 の対策: オーナーウィンドウ方式に変更
+    - 非表示オーナー Window を作成し、NoteWindow.Owner に設定
+    - オーナー付きウィンドウは Alt+Tab に出ない（WS_EX_TOOLWINDOW 不要）
+    - かつ仮想デスクトップ管理に正常参加できる
+
+[完了] P3.5-4: Registry からデスクトップ一覧取得
+  - パス: HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops
+  - VirtualDesktopIDs（REG_BINARY）→ 16bytes ごとに GUID パース → ✅ 成功
+  - デスクトップ名: Desktops\{guid}\Name → ✅ 取得成功
+  - 2デスクトップ環境で正常動作を確認
+
+[検証] P3.5-VERIFY: スパイク検証結果
+  ✅ COM 初期化が成功する
+  ✅ 現在デスクトップ ID が GUID として取得できる
+  ⚠️ NoteWindow の仮想デスクトップ移動: WS_EX_TOOLWINDOW が原因で不可（DJ-7）
+    → Phase 8 でオーナーウィンドウ方式に変更して解決予定
+  ✅ COM 失敗時にアプリがクラッシュしない（graceful 無効化）
+  ✅ Registry からデスクトップ一覧が正しく取得できる
+
+追加知見:
+  - H.NotifyIcon.Wpf のトレイメニューから MessageBox を出すと一瞬で消える問題
+    → async + await Task.Delay(300) でメニュー閉じ待ちが必要
+
+設計判断追加:
+  - DJ-7: WS_EX_TOOLWINDOW は仮想デスクトップ管理の対象外
+    Phase 8 でオーナーウィンドウ方式に変更する
+
+新規ファイル:
+  - TopFusen/Interop/VirtualDesktopInterop.cs（COM インターフェース定義）
+  - TopFusen/Services/VirtualDesktopService.cs（仮想デスクトップ操作サービス）
+
+変更ファイル:
+  - TopFusen/App.xaml.cs（VD サービス初期化 + スパイク検証メニュー追加）

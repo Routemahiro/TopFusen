@@ -50,6 +50,18 @@
 - ただし重い処理（Registry 読み等）はバックグラウンドで行い、結果を UI スレッドに戻す
 - COM 初期化失敗時はログ出力 + 仮想デスクトップ機能を graceful に無効化
 
+### DJ-7: WS_EX_TOOLWINDOW は仮想デスクトップ管理の対象外（Phase 3.5 スパイクで判明）
+- **問題**: `WS_EX_TOOLWINDOW` を持つオーナーなしウィンドウは、OS の仮想デスクトップ管理に参加しない
+  - `GetWindowDesktopId` が `Guid.Empty` を返す（OS が追跡していない）
+  - `MoveWindowToDesktop` は成功を返すが実際には移動しない
+  - 結果としてウィンドウが全デスクトップで表示される
+- **検証**: 普通の Window（TOOLWINDOW なし）では `MoveWindowToDesktop` が正常に動作することを確認
+- **対策（Phase 8 で実施）**: Alt+Tab 非表示を **オーナーウィンドウ方式** に変更する
+  - 非表示のオーナー Window を1つ作成し、NoteWindow の Owner に設定
+  - オーナー付きウィンドウは Alt+Tab に出ない（WS_EX_TOOLWINDOW 不要）
+  - かつ、仮想デスクトップ管理に正常に参加できる
+  - `ShowInTaskbar=false` はそのまま維持
+
 ### DJ-6: クリック透過は三重制御方式（Phase 2 で判明）
 - WPF `AllowsTransparency=True` は `WS_EX_LAYERED` を自動付与する
 - `WS_EX_LAYERED` 環境では `WS_EX_TRANSPARENT` の ON/OFF だけではクリック制御が不十分
@@ -201,26 +213,29 @@
 
 ---
 
-## Phase 3.5: 仮想デスクトップ 技術スパイク 🔧 (作業中)
+## Phase 3.5: 仮想デスクトップ 技術スパイク ✅ (2026-02-07 完了)
 > 目標: 仮想デスクトップ API の成立を早期検証する（Phase 8 の前倒しリスク軽減）
 > ※ 本格実装は Phase 8。ここでは「使えるか」「どう使うか」を検証するだけ
 > 実装方針: **案B（全API検証 + VirtualDesktopService分離 + トレイ検証メニュー）**
 
-- [x] P3.5-1: COM Interop — IVirtualDesktopManager の初期化成立確認 (作業中)
-  - CLSID_VirtualDesktopManager の CoCreateInstance
-  - 失敗時の graceful 無効化パス
-- [ ] P3.5-2: 現在デスクトップID取得（短命ウィンドウ方式）の実証
-  - 短命 Window を作成 → GetWindowDesktopId → GUID 取得 → Window 破棄
-- [ ] P3.5-3: MoveWindowToDesktop で NoteWindow を別デスクトップへ移動できることを確認
-- [ ] P3.5-4: Registry からデスクトップ一覧を読む実験（ベストエフォート）
-  - VirtualDesktopIDs byte[] → GUID[]
-  - デスクトップが1つだけの場合の挙動確認（値が空になるケース）
-- [ ] **P3.5-VERIFY: スパイク検証**
-  - [ ] COM 初期化が成功する
-  - [ ] 現在デスクトップ ID が GUID として取得できる
-  - [ ] NoteWindow を Desktop B へ移動すると Desktop A から消える
-  - [ ] COM 失敗時にアプリがクラッシュしない（graceful 無効化）
-  - [ ] **スパイク結果を progress_log.txt に記録**（成否・制約・注意点）
+- [x] P3.5-1: COM Interop — IVirtualDesktopManager の初期化成立確認 (2026-02-07 完了)
+  - CLSID_VirtualDesktopManager の CoCreateInstance → ✅ 成功
+  - 失敗時の graceful 無効化パス → ✅ try/catch で IsAvailable=false
+- [x] P3.5-2: 現在デスクトップID取得（短命ウィンドウ方式）の実証 (2026-02-07 完了)
+  - 短命 Window を作成 → GetWindowDesktopId → GUID 取得 → Window 破棄 → ✅ 成功
+- [x] P3.5-3: MoveWindowToDesktop で NoteWindow を別デスクトップへ移動できることを確認 (2026-02-07 完了)
+  - ⚠️ **普通の Window は移動成功。NoteWindow は WS_EX_TOOLWINDOW が原因で移動不可**
+  - 原因: WS_EX_TOOLWINDOW（オーナーなし）は仮想デスクトップ管理の対象外（DJ-7）
+  - 対策: Phase 8 でオーナーウィンドウ方式に変更する
+- [x] P3.5-4: Registry からデスクトップ一覧を読む実験（ベストエフォート）(2026-02-07 完了)
+  - VirtualDesktopIDs byte[] → GUID[] パース → ✅ 成功
+  - デスクトップ名取得 → ✅ 成功
+- [x] **P3.5-VERIFY: スパイク検証** (2026-02-07 完了)
+  - [x] COM 初期化が成功する
+  - [x] 現在デスクトップ ID が GUID として取得できる
+  - [x] NoteWindow を Desktop B へ移動 → ⚠️ 現状不可（DJ-7: TOOLWINDOW 問題）。Phase 8 でオーナーウィンドウ方式に変更予定
+  - [x] COM 失敗時にアプリがクラッシュしない（graceful 無効化）
+  - [x] **スパイク結果を progress_log.txt に記録**
 
 ---
 
@@ -394,6 +409,9 @@
 - [ ] P8-1: Phase 3.5 のスパイクコードを正式実装へ昇格
   - IVirtualDesktopManager ラッパー（Services/VirtualDesktopService.cs）
   - COM 初期化失敗時の graceful 無効化
+  - **★ DJ-7 対応: WS_EX_TOOLWINDOW → オーナーウィンドウ方式に変更**
+    - 非表示オーナー Window を作成し、NoteWindow.Owner に設定
+    - WS_EX_TOOLWINDOW を除去 → 仮想デスクトップ管理に参加可能にする
 - [ ] P8-2: 現在デスクトップID取得の安定実装（短命ウィンドウ方式）
 - [ ] P8-3: Registry — デスクトップ一覧取得（ベストエフォート）
   - VirtualDesktopIDs byte[] → GUID[] パース
@@ -600,7 +618,7 @@
 | Phase 1 | トレイ常駐 + 最小付箋 | ✅ 完了 (2026-02-06) |
 | Phase 2 | Win32 Interop + モード切替 | ✅ 完了 (2026-02-06) |
 | Phase 3 | 移動・リサイズ + 基本UI | ✅ 完了 (2026-02-07) |
-| Phase 3.5 | 仮想デスクトップ技術スパイク | 🔧 作業中 |
+| Phase 3.5 | 仮想デスクトップ技術スパイク | ✅ 完了 (2026-02-07) |
 | Phase 4 | リッチテキスト編集 | 未着手 |
 | Phase 5 | 永続化 | 未着手 |
 | Phase 6 | 見た目・スタイル | 未着手 |
