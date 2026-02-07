@@ -383,3 +383,97 @@ Phase 4: リッチテキスト編集（FR-TEXT）— 2026-02-07
 変更ファイル:
   - TopFusen/Views/NoteWindow.xaml（RichTextBox + 装飾ツールバー + 文字色パレットPopup）
   - TopFusen/Views/NoteWindow.xaml.cs（装飾ロジック + ツールバー状態同期 + フォント正規化）
+
+==============================
+Phase 5: 永続化（FR-PERSIST）— 2026-02-07
+==============================
+
+実装方針: 案B（PRD仕様準拠 — Atomic Write + デバウンス + 破損検知フォールバック）
+
+[P5-1] PersistenceService 作成（Services/PersistenceService.cs）
+  - JSON 読み書き: System.Text.Json（.NET 8 標準、追加パッケージ不要）
+  - RTF 読み書き: byte[] でファイル直接 I/O
+  - Atomic Write: tmp → File.Replace → .bak（1世代バックアップ）
+  - 破損検知: JSON パース失敗 → .bak フォールバック → CorruptionRecovered フラグ
+  - デバウンス: DispatcherTimer 3秒（UIスレッドで発火 — RichTextBox アクセスに必要）
+  - FlushSave: 即時保存（終了 / SessionEnding 時用）
+  - SaveRequested イベント: NoteManager.SaveAll() を呼び出す
+
+[P5-2] notes.json 保存/読込
+  - NotesData（全 NoteModel のメタデータリスト）を JSON シリアライズ
+  - LoadJsonWithFallback<T> で破損時 .bak フォールバック付き読み込み
+
+[P5-3] notes/{NoteId}.rtf 保存/読込
+  - NoteWindow.GetRtfBytes(): TextRange.Save(stream, DataFormats.Rtf) → byte[]
+  - NoteWindow.LoadRtfBytes(byte[]): TextRange.Load(stream, DataFormats.Rtf)
+  - _isLoadingContent フラグで読み込み中の TextChanged 発火を抑制
+
+[P5-4] settings.json 保存/読込
+  - AppSettings の JSON シリアライズ（破損時 .bak フォールバック付き）
+
+[P5-5] Atomic Write 実装
+  - File.WriteAllText → tmp ファイル
+  - File.Replace(tmp, main, bak) で旧 main → .bak に移動 + tmp → main に置換
+  - 初回保存: File.Move(tmp, main)
+  - File.Replace 失敗時: File.Copy フォールバック
+
+[P5-6] 破損検知 + .bak フォールバック + ユーザー通知
+  - メインファイルのパース失敗 → .bak を読み込み
+  - CorruptionRecovered フラグ + RecoveryMessage を設定
+  - App.xaml.cs: 起動後に Dispatcher.BeginInvoke で MessageBox 通知
+
+[P5-7] デバウンス保存（3秒）
+  - DispatcherTimer（UIスレッド発火）
+  - ScheduleSave(): タイマーリセット → 最後の変更から3秒後に SaveAll
+  - テキスト変更 / 位置変更 / サイズ変更 → NoteChanged イベント → ScheduleSave()
+
+[P5-8] 終了時の強制フラッシュ
+  - App.OnExit: _persistence.FlushSave() → 全ウィンドウ Close の前に保存
+  - FlushSave: タイマー停止 → 即時 SaveRequested 発火
+
+[P5-9] SessionEnding / Application.Exit フック
+  - App.OnSessionEnding: _persistence.FlushSave()（ログオフ / シャットダウン時）
+  - App.OnExit: _persistence.FlushSave() + _persistence.Dispose()
+
+[P5-10] 起動時ロード → NoteManager.LoadAll()
+  - settings.json 読み込み → AppSettings 復元
+  - notes.json 読み込み → 各 NoteModel を RestoreNote() で復元
+  - RestoreNote: NoteWindow 作成 → RTF 読み込み → 編集OFF → 変更追跡有効化
+  - FR-BOOT-2: 起動直後は必ず編集OFF（非干渉モード）
+
+[P5-11] 削除時のファイル掃除 + 孤立RTF自動削除
+  - DeleteNote(): PersistenceService.DeleteRtf(noteId) + ScheduleSave()
+  - LoadAll(): CleanupOrphanedRtfFiles() で notes.json に無い RTF を自動削除
+
+NoteWindow 追加実装（Phase 5 連携）:
+  - NoteChanged イベント: テキスト / 位置 / サイズ変更時に発火
+  - _isTrackingChanges: 初期化完了後に有効化（初期化中の不要な保存を防止）
+  - _isLoadingContent: RTF 読み込み中の TextChanged 抑制
+  - SyncModelFromWindow(): ウィンドウの Left/Top/ActualWidth/ActualHeight を Model に同期
+  - GetFirstLinePreview(): RichTextBox の先頭行テキスト取得（Z順一覧用）
+  - EnableChangeTracking(): 初期化完了後に NoteManager が呼ぶ
+
+NoteManager 追加実装（Phase 5 連携）:
+  - コンストラクタ: PersistenceService を DI で受け取り、SaveRequested に SaveAll を登録
+  - SaveAll(): 全モデル同期 → notes.json 保存 → 全RTF 保存 → settings.json 保存
+  - LoadAll(): settings.json + notes.json 読み込み → RestoreNote() で復元 → 孤立RTF掃除
+  - RestoreNote(): 保存された NoteModel から NoteWindow を復元
+  - CreateNote / DuplicateNote / DeleteNote: 操作後に ScheduleSave()
+  - DuplicateNote: RTF コンテンツもソースからコピー
+  - WireUpNoteEvents: NoteChanged イベントを追加購読
+
+App.xaml.cs 追加実装（Phase 5 連携）:
+  - ConfigureServices: PersistenceService を DI に登録
+  - OnStartup: LoadAll() → 破損復旧通知（MessageBox）
+  - OnSessionEnding: FlushSave()
+  - OnExit: FlushSave() → CloseAllWindows() → Dispose()
+
+[ビルド検証] ✅ エラー0、警告0、Lint クリーン
+
+新規ファイル:
+  - TopFusen/Services/PersistenceService.cs（永続化サービス）
+
+変更ファイル:
+  - TopFusen/Views/NoteWindow.xaml.cs（RTF load/save + 変更追跡 + モデル同期）
+  - TopFusen/Services/NoteManager.cs（SaveAll/LoadAll/RestoreNote + 永続化連携）
+  - TopFusen/App.xaml.cs（DI登録 + LoadAll + FlushSave + 破損通知）
