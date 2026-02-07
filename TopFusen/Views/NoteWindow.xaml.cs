@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -199,9 +201,9 @@ public partial class NoteWindow : Window
 
     /// <summary>
     /// 選択状態・編集モードに応じてUI要素の表示を更新する
-    /// - 編集ON + 選択中: ツールバー、下部アイコン、選択枠/影 を表示
-    /// - 編集ON + 未選択: 本文のみ（枠なし）
-    /// - 編集OFF: すべてのUI要素を非表示（本文のみ）
+    /// - 編集ON + 選択中: ツールバー、下部アイコン、選択枠/影、テキスト編集可能
+    /// - 編集ON + 未選択: 本文のみ（枠なし、クリックで選択可能）
+    /// - 編集OFF: すべてのUI要素を非表示（本文のみ、クリック透過）
     /// </summary>
     private void UpdateVisualState()
     {
@@ -221,6 +223,22 @@ public partial class NoteWindow : Window
         {
             NoteBorder.BorderBrush = Brushes.Transparent;
             NoteBorder.Effect = null;
+        }
+
+        // Phase 4: RichTextBox の編集状態管理
+        var canEdit = IsInEditMode && IsSelected;
+        NoteRichTextBox.IsReadOnly = !canEdit;
+        NoteRichTextBox.Focusable = canEdit;
+        // 編集モード中はクリックを受け付ける（未選択でもクリック→Window Activated→選択）
+        // 非干渉モードではクリック透過（WS_EX_TRANSPARENT が Window レベルで処理）
+        NoteRichTextBox.IsHitTestVisible = IsInEditMode;
+        NoteRichTextBox.VerticalScrollBarVisibility =
+            canEdit ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
+
+        // フォーカスクリア（編集不可になった場合）
+        if (!canEdit && NoteRichTextBox.IsKeyboardFocused)
+        {
+            Keyboard.ClearFocus();
         }
     }
 

@@ -54,18 +54,26 @@
                 </Grid>
             </Border>
 
-            <!-- === 本文領域 === -->
-            <!-- Phase 4 で RichTextBox に置き換え予定 -->
-            <TextBlock x:Name="NoteText"
-                       Grid.Row="1"
-                       Text=""
-                       FontSize="14"
-                       FontFamily="Yu Gothic UI"
-                       Foreground="#FF333333"
-                       TextWrapping="Wrap"
-                       VerticalAlignment="Top"
-                       Padding="8,6"
-                       IsHitTestVisible="False"/>
+            <!-- === 本文領域（Phase 4: RichTextBox） === -->
+            <RichTextBox x:Name="NoteRichTextBox"
+                         Grid.Row="1"
+                         FontSize="14"
+                         FontFamily="Yu Gothic UI"
+                         Foreground="#FF333333"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         BorderBrush="Transparent"
+                         Padding="6,4"
+                         IsReadOnly="True"
+                         Focusable="False"
+                         IsHitTestVisible="False"
+                         AcceptsReturn="True"
+                         IsTabStop="False"
+                         VerticalScrollBarVisibility="Hidden"
+                         HorizontalScrollBarVisibility="Disabled"
+                         WindowChrome.IsHitTestVisibleInChrome="True">
+                <FlowDocument PagePadding="2"/>
+            </RichTextBox>
 
             <!-- === P3-5/P3-6: 下部アイコン列（編集ON + 選択中のみ表示） === -->
             <Border x:Name="BottomBar"
