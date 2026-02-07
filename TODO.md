@@ -425,27 +425,29 @@
 
 ---
 
-## Phase 8.0: VD 自前管理 技術スパイク 🔬
+## Phase 8.0: VD 自前管理 技術スパイク ✅ (2026-02-07 完了)
 > 目標: DJ-10 方式（WS_EX_TRANSPARENT + DWMWA_CLOAK + ポーリング）の技術検証
 > ※ Phase 8 本格実装の前に「動くか」を確認するスパイク
 > 背景: WS_EX_TRANSPARENT と OS の VD 追跡が共存不可能であることが判明（DJ-8/DJ-9）
 > 方針: OS の VD 追跡に頼らず、DWMWA_CLOAK で自前管理する
 
-- [ ] P8.0-1: NativeMethods 拡張（DwmSetWindowAttribute / DWMWA_CLOAK / SetWindowPos）
-- [ ] P8.0-2: VD Tracker Window 実装（WS_EX_TRANSPARENT なし常駐 HWND）
-- [ ] P8.0-3: DWMWA_CLOAK による Cloak/Uncloak 実装
-- [ ] P8.0-4: DispatcherTimer ポーリングによる VD 切替検知
-- [ ] P8.0-5: WS_EX_TRANSPARENT 復活（DJ-9 撤回 → DJ-6 三重制御に戻す）
-- [ ] P8.0-6: 基本的な VD 表示制御（デスクトップ切替時に Cloak/Uncloak）
-- [ ] P8.0-7: 付箋作成時に現在 DesktopId を付与 + 起動復元時の VD 振り分け
-- [ ] P8.0-8: トレイデバッグメニューに検証項目追加
-- [ ] **P8.0-VERIFY: スパイク検証**
-  - [ ] DWMWA_CLOAK で NoteWindow が隠れる / 再表示される
-  - [ ] VD Tracker Window で現在のデスクトップ ID が取得できる
-  - [ ] クリック透過が復活している（編集 OFF 時にクロスプロセスで透過）
-  - [ ] デスクトップ切替時に正しい付箋だけが表示される
-  - [ ] Uncloak 後に Topmost が維持されている
-  - [ ] 再起動後に DesktopId が復元され、正しい VD に付箋が表示される
+- [x] P8.0-1: NativeMethods 拡張（DwmSetWindowAttribute / DWMWA_CLOAK / SetWindowPos）(2026-02-07 完了)
+- [x] P8.0-2: VD Tracker Window 実装（WS_EX_TRANSPARENT なし常駐 HWND）(2026-02-07 完了)
+- [x] P8.0-3: DWMWA_CLOAK による Cloak/Uncloak 実装 (2026-02-07 完了)
+- [x] P8.0-4: DispatcherTimer ポーリングによる VD 切替検知 (2026-02-07 完了)
+- [x] P8.0-5: WS_EX_TRANSPARENT 復活（DJ-9 撤回 → DJ-6 三重制御に戻す）(2026-02-07 完了)
+- [x] P8.0-6: 基本的な VD 表示制御（デスクトップ切替時に Cloak/Uncloak）(2026-02-07 完了)
+- [x] P8.0-7: 付箋作成時に現在 DesktopId を付与 + 起動復元時の VD 振り分け (2026-02-07 完了)
+- [x] P8.0-8: トレイデバッグメニューに検証項目追加 (2026-02-07 完了)
+- [x] **P8.0-VERIFY: スパイク検証** (2026-02-07 完了 ★実機確認済み)
+  - [x] DWMWA_CLOAK で NoteWindow が隠れる / 再表示される
+  - [x] VD Tracker Window で現在のデスクトップ ID が取得できる
+  - [x] クリック透過が復活している（編集 OFF 時にクロスプロセスで透過）
+  - [x] デスクトップ切替時に正しい付箋だけが表示される
+  - [x] Uncloak 後に Topmost が維持されている
+  - [x] 再起動後に DesktopId が復元され、正しい VD に付箋が表示される
+  - [x] **追加検証**: 編集ON中のVD切替でも正しく分離される（Fix2 適用後）
+  - [x] **追加検証**: 起動順序修正後、起動直後から正しいVDに付箋が配置される（Fix1 適用後）
 
 ---
 
@@ -731,7 +733,7 @@
 | Phase 5 | 永続化 | ✅ 完了 (2026-02-07) |
 | Phase 6 | 見た目・スタイル | 未着手 |
 | Phase 7 | マルチモニタ | 未着手 |
-| Phase 8.0 | VD 自前管理 技術スパイク | 🔧 作業中 |
+| Phase 8.0 | VD 自前管理 技術スパイク | ✅ 完了 (2026-02-07) |
 | Phase 8 | 仮想デスクトップ | ★ 前倒し（8.0 スパイク後） |
 | Phase 9 | Z順管理 | 未着手 |
 | Phase 10 | 非表示 + ホットキー + 自動起動 | 未着手 |
