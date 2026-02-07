@@ -529,16 +529,17 @@
 - [x] P8-5: 復元時の VD 振り分け (Phase 8.0 で DJ-10 方式に変更)
   - MoveWindowToDesktop → DWMWA_CLOAK 自前管理に変更
   - RestoreNote 内で非現在VD付箋を Cloak
-- [ ] P8-6: デスクトップ喪失フォールバック ← **★ 本実装の主対象**
+- [x] P8-6: デスクトップ喪失フォールバック (2026-02-07 完了)
   - 起動時: 保存 DesktopId を Registry 一覧と照合 → 存在しなければ現在VDに付替
-  - HandleDesktopSwitch: 孤立付箋（どの VD にも属さない）を現在 VD に救済
-  - VD が1つだけの場合: Registry 一覧が空でも正常動作（全付箋を表示）
-- [ ] P8-7: ポーリング間隔最適化 ← **★ 案B 追加**
-  - 300ms → 500ms に変更（CPU 負荷軽減）
+  - VirtualDesktopService.IsDesktopAlive() / FindOrphanedDesktopIds() を追加
+  - NoteManager.RescueOrphanedNotes() で一括救済 + 保存スケジュール
+  - VD が1つだけの場合: Registry 一覧が空でも現在VDと比較して判定
+- [x] P8-7: ポーリング間隔最適化 (2026-02-07 完了)
+  - 300ms → 500ms に変更（CPU 負荷軽減、体感遅延は十分許容範囲）
   - 将来的に RegNotifyChangeKeyValue への切替を検討（Phase 8 では見送り）
-- [ ] P8-8: スパイクコード整理 ← **★ 案B 追加**
+- [x] P8-8: スパイクコード整理 (2026-02-07 完了)
   - コメント・ログの「Phase 8.0」→「Phase 8」統一
-  - デバッグメニューをスパイク検証用から正式デバッグ機能に格上げ
+  - デバッグメニューをスパイク検証用から正式デバッグ機能に格上げ（ラベル簡潔化）
 - [ ] **P8-VERIFY: Phase 8 検証**
   - [ ] Desktop A で作成した付箋が Desktop B で見えない
   - [ ] Desktop B で作成した付箋が Desktop A で見えない
