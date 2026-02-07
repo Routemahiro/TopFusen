@@ -78,14 +78,19 @@ public partial class App : Application
         _noteManager = _serviceProvider.GetRequiredService<NoteManager>();
         _noteManager.InitializeOwnerWindow();
 
-        // 8. Phase 5: 保存データから付箋を復元（起動直後は編集OFF — FR-BOOT-2）
+        // 8. 仮想デスクトップサービス初期化（DJ-4: UIスレッドで / ★ LoadAll より前に）
+        _vdService = _serviceProvider.GetRequiredService<VirtualDesktopService>();
+        _vdService.Initialize();
+        _vdService.InitializeTracker(_noteManager.OwnerHandle);
+
+        // 9. Phase 5: 保存データから付箋を復元（起動直後は編集OFF — FR-BOOT-2）
+        //    ★ VD サービス初期化後に呼ぶこと — RestoreNote 内で VD Cloak が必要
         _noteManager.LoadAll();
 
-        // 9. Phase 5: 破損からの復旧通知
+        // 10. Phase 5: 破損からの復旧通知
         if (_persistence.CorruptionRecovered)
         {
             Log.Warning("設定ファイル破損を検知し、バックアップから復旧しました");
-            // トレイ初期化後にメッセージ表示（Dispatcher で遅延）
             Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,
                 new Action(() =>
                 {
@@ -97,12 +102,7 @@ public partial class App : Application
                 }));
         }
 
-        // 10. 仮想デスクトップサービス初期化（DJ-4: UIスレッドで初期化）
-        _vdService = _serviceProvider.GetRequiredService<VirtualDesktopService>();
-        _vdService.Initialize();
-
-        // 10.1 Phase 8.0: VD Tracker Window 初期化 + デスクトップ監視開始
-        _vdService.InitializeTracker(_noteManager.OwnerHandle);
+        // 11. Phase 8.0: デスクトップ監視開始（LoadAll 後に開始）
         _vdService.DesktopChanged += OnDesktopChanged;
         _vdService.StartDesktopMonitoring();
 

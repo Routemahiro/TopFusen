@@ -106,19 +106,21 @@ public class NoteManager
 
     /// <summary>
     /// 編集モードを切り替え、全付箋ウィンドウに一括反映する
-    /// DJ-10: 編集 OFF 時は「先に非現在VDの付箋を Cloak → WS_EX_TRANSPARENT 付与」の順序で
-    ///        編集 ON 時は「WS_EX_TRANSPARENT 除去 → 現在VDの付箋を Uncloak」の順序
-    ///        これにより「編集OFF直後に他VDで付箋が一瞬表示される」ちらつきを防ぐ
+    /// DJ-10: 
+    ///   編集 OFF: ① 非現在VD付箋を Cloak → ② 全付箋に WS_EX_TRANSPARENT 付与
+    ///   編集 ON:  ① 現在VD付箋のみ WS_EX_TRANSPARENT 除去（非現在VDは WS_EX_TRANSPARENT 維持で OS 干渉回避）
+    ///            ② 現在VD付箋を Uncloak
+    /// ★ 非現在VD付箋は常に WS_EX_TRANSPARENT を維持する（OS の VD 追跡が介入しないようにする）
     /// </summary>
     public void SetEditMode(bool isEditMode)
     {
         IsEditMode = isEditMode;
-        var clickThrough = !isEditMode;
+        var currentDesktop = _vdService.IsAvailable ? _vdService.GetCurrentDesktopIdFast() : null;
 
-        if (clickThrough && _vdService.IsAvailable)
+        if (!isEditMode)
         {
-            // DJ-10: 編集 OFF 遷移 — ① 非現在VDの付箋を先に Cloak
-            var currentDesktop = _vdService.GetCurrentDesktopIdFast();
+            // === 編集 OFF 遷移 ===
+            // ① 非現在VD付箋を先に Cloak（ちらつき対策）
             if (currentDesktop.HasValue)
             {
                 foreach (var (model, window) in _notes)
@@ -132,35 +134,40 @@ public class NoteManager
                     }
                 }
             }
-        }
 
-        // ② クリック透過 + 編集モード切替
-        foreach (var (_, window) in _notes)
-        {
-            window.SetClickThrough(clickThrough);
-            window.SetInEditMode(isEditMode);
-        }
+            // ② 全付箋に WS_EX_TRANSPARENT 付与 + 編集 OFF
+            foreach (var (_, window) in _notes)
+            {
+                window.SetClickThrough(true);
+                window.SetInEditMode(false);
+            }
 
-        // 編集OFF → 選択クリア
-        if (!isEditMode)
-        {
             DeselectAll();
         }
-        else if (_vdService.IsAvailable)
+        else
         {
-            // DJ-10: 編集 ON 遷移 — WS_EX_TRANSPARENT 除去後に現在VDの付箋を Uncloak
-            var currentDesktop = _vdService.GetCurrentDesktopIdFast();
-            if (currentDesktop.HasValue)
+            // === 編集 ON 遷移 ===
+            foreach (var (model, window) in _notes)
             {
-                foreach (var (model, window) in _notes)
-                {
-                    var hwnd = new WindowInteropHelper(window).Handle;
-                    if (hwnd == IntPtr.Zero) continue;
+                var hwnd = new WindowInteropHelper(window).Handle;
+                var belongsHere = model.DesktopId == Guid.Empty
+                    || !currentDesktop.HasValue
+                    || model.DesktopId == currentDesktop.Value;
 
-                    if (model.DesktopId == Guid.Empty || model.DesktopId == currentDesktop.Value)
+                if (belongsHere)
+                {
+                    // 現在VD付箋: WS_EX_TRANSPARENT 除去（クリック可能に）+ 編集 ON + Uncloak
+                    window.SetClickThrough(false);
+                    window.SetInEditMode(true);
+                    if (hwnd != IntPtr.Zero)
                     {
                         VirtualDesktopService.UncloakWindow(hwnd);
                     }
+                }
+                else
+                {
+                    // 非現在VD付箋: WS_EX_TRANSPARENT 維持（OS VD 追跡を回避）+ Cloak 維持
+                    // 編集モードは設定しない（見えないので不要）
                 }
             }
         }
@@ -573,7 +580,8 @@ public class NoteManager
     /// <summary>
     /// デスクトップ切替時に付箋の表示/非表示を制御する（DJ-10）
     /// 現在の VD に属する付箋を Uncloak、それ以外を Cloak
-    /// VD 未設定（DesktopId == Guid.Empty）の付箋は常に表示
+    /// ★ 編集モード中は、現在VDの付箋のみ WS_EX_TRANSPARENT を外してクリック可能にする
+    ///    非現在VDの付箋は WS_EX_TRANSPARENT を維持して OS の VD 追跡干渉を回避
     /// </summary>
     public void HandleDesktopSwitch(Guid currentDesktopId)
     {
@@ -585,22 +593,49 @@ public class NoteManager
             var hwnd = new WindowInteropHelper(window).Handle;
             if (hwnd == IntPtr.Zero) continue;
 
-            if (model.DesktopId == Guid.Empty || model.DesktopId == currentDesktopId)
+            var belongsHere = model.DesktopId == Guid.Empty || model.DesktopId == currentDesktopId;
+
+            if (belongsHere)
             {
-                // 現在の VD に属する（または VD 未設定）→ 表示
+                // 現在の VD に属する → 表示
                 VirtualDesktopService.UncloakWindow(hwnd);
                 uncloakCount++;
+
+                if (IsEditMode)
+                {
+                    // 編集中: クリック可能にする
+                    window.SetClickThrough(false);
+                    window.SetInEditMode(true);
+                }
             }
             else
             {
                 // 他の VD に属する → 非表示
+                if (IsEditMode)
+                {
+                    // 編集中: WS_EX_TRANSPARENT を戻す（OS VD 追跡回避）+ 編集状態解除
+                    window.SetClickThrough(true);
+                    window.SetInEditMode(false);
+                }
                 VirtualDesktopService.CloakWindow(hwnd);
                 cloakCount++;
             }
         }
 
-        Log.Information("デスクトップ切替処理: VD={DesktopId}, 表示={Uncloak}, 非表示={Cloak}",
-            currentDesktopId, uncloakCount, cloakCount);
+        // 編集中にVD切替した場合、選択をクリア（切替先に選択付箋がない可能性）
+        if (IsEditMode && SelectedNoteId.HasValue)
+        {
+            var selectedExists = _notes.Any(n =>
+                n.Model.NoteId == SelectedNoteId.Value &&
+                (n.Model.DesktopId == Guid.Empty || n.Model.DesktopId == currentDesktopId));
+            if (!selectedExists)
+            {
+                DeselectAll();
+            }
+        }
+
+        Log.Information("デスクトップ切替処理: VD={DesktopId}, 表示={Uncloak}, 非表示={Cloak}, EditMode={EditMode}",
+            currentDesktopId, uncloakCount, cloakCount, IsEditMode);
     }
 
     // ==========================================
