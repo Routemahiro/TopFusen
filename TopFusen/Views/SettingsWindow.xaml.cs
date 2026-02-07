@@ -432,6 +432,9 @@ public partial class SettingsWindow : Window
 
     private void InitializeDetailsTab()
     {
+        // Phase 15: デバッグメニュー表示設定
+        DebugMenuCheckBox.IsChecked = _noteManager.AppSettings.DebugMenuEnabled;
+
         // バージョン情報
         var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "不明";
         var os = Environment.OSVersion;
@@ -439,6 +442,26 @@ public partial class SettingsWindow : Window
             + $".NET {Environment.Version}\n"
             + $"OS: {os.VersionString}\n"
             + $"データ: {AppDataPaths.Base}";
+    }
+
+    /// <summary>
+    /// デバッグメニュー表示設定の変更ハンドラ（Phase 15）
+    /// </summary>
+    private void DebugMenuCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing) return;
+
+        var enabled = DebugMenuCheckBox.IsChecked == true;
+        _noteManager.AppSettings.DebugMenuEnabled = enabled;
+        _persistence.ScheduleSave();
+
+        // トレイメニューを再構築してデバッグ項目の表示/非表示を即時反映
+        if (Application.Current is App app)
+        {
+            app.RebuildTrayMenu();
+        }
+
+        Log.Information("設定画面: デバッグメニュー表示 = {Enabled}", enabled);
     }
 
     private void OpenLogFolderButton_Click(object sender, RoutedEventArgs e)

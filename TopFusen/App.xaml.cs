@@ -211,20 +211,23 @@ public partial class App : Application
 
         menu.Items.Add(new Separator());
 
-        // --- Phase 8: VD デバッグメニュー ---
-        var vdInfoItem = new MenuItem { Header = "🔬 VD: 情報取得" };
-        vdInfoItem.Click += OnVdSpikeInfoTest;
-        menu.Items.Add(vdInfoItem);
+        // --- Phase 8/15: VD デバッグメニュー（DebugMenuEnabled で表示/非表示） ---
+        if (_noteManager?.AppSettings.DebugMenuEnabled == true)
+        {
+            var vdInfoItem = new MenuItem { Header = "🔬 VD: 情報取得" };
+            vdInfoItem.Click += OnVdSpikeInfoTest;
+            menu.Items.Add(vdInfoItem);
 
-        var vdCloakItem = new MenuItem { Header = "🔬 VD: Cloak/Uncloak 確認" };
-        vdCloakItem.Click += OnVdCloakTest;
-        menu.Items.Add(vdCloakItem);
+            var vdCloakItem = new MenuItem { Header = "🔬 VD: Cloak/Uncloak 確認" };
+            vdCloakItem.Click += OnVdCloakTest;
+            menu.Items.Add(vdCloakItem);
 
-        var vdStatusItem = new MenuItem { Header = "🔬 VD: 全付箋状態" };
-        vdStatusItem.Click += OnVdStatusTest;
-        menu.Items.Add(vdStatusItem);
+            var vdStatusItem = new MenuItem { Header = "🔬 VD: 全付箋状態" };
+            vdStatusItem.Click += OnVdStatusTest;
+            menu.Items.Add(vdStatusItem);
 
-        menu.Items.Add(new Separator());
+            menu.Items.Add(new Separator());
+        }
 
         // --- 終了（FR-TRAY-5）---
         var exitItem = new MenuItem { Header = "✖ 終了" };
@@ -257,6 +260,21 @@ public partial class App : Application
         _settingsWindow.Show();
 
         Log.Information("設定画面を開きました");
+    }
+
+    // ==========================================
+    //  Phase 15: トレイメニュー再構築（設定画面から呼び出し可能）
+    // ==========================================
+
+    /// <summary>
+    /// トレイメニューを再構築する（デバッグメニュー表示/非表示の切替時に呼ばれる）
+    /// </summary>
+    public void RebuildTrayMenu()
+    {
+        if (_trayIcon == null) return;
+        _trayIcon.ContextMenu = CreateTrayContextMenu();
+        Log.Information("トレイメニューを再構築しました（DebugMenuEnabled={Enabled}）",
+            _noteManager?.AppSettings.DebugMenuEnabled ?? false);
     }
 
     // ==========================================

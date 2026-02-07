@@ -536,6 +536,13 @@ public partial class NoteWindow : Window
                 var foreground = selection.GetPropertyValue(TextElement.ForegroundProperty);
                 if (foreground is SolidColorBrush brush) TextColorIndicator.Fill = brush;
             }
+
+            // --- Phase 15: テキスト配置 ---
+            var alignProp = selection.GetPropertyValue(Paragraph.TextAlignmentProperty);
+            var alignment = alignProp is TextAlignment ta ? ta : TextAlignment.Left;
+            SetToolbarButtonActive(AlignLeftButton, alignment == TextAlignment.Left);
+            SetToolbarButtonActive(AlignCenterButton, alignment == TextAlignment.Center);
+            SetToolbarButtonActive(AlignRightButton, alignment == TextAlignment.Right);
         }
         finally
         {
@@ -703,6 +710,79 @@ public partial class NoteWindow : Window
         NoteRichTextBox.Focus();
     }
 
+    // ==========================================
+    //  Phase 15: テキスト配置（水平3方向 + 垂直2方向）
+    // ==========================================
+
+    /// <summary>左揃えボタンクリック</summary>
+    private void AlignLeftButton_Click(object sender, RoutedEventArgs e)
+    {
+        ApplyTextAlignment(TextAlignment.Left);
+    }
+
+    /// <summary>中央揃えボタンクリック</summary>
+    private void AlignCenterButton_Click(object sender, RoutedEventArgs e)
+    {
+        ApplyTextAlignment(TextAlignment.Center);
+    }
+
+    /// <summary>右揃えボタンクリック</summary>
+    private void AlignRightButton_Click(object sender, RoutedEventArgs e)
+    {
+        ApplyTextAlignment(TextAlignment.Right);
+    }
+
+    /// <summary>
+    /// 段落の TextAlignment を適用する（選択範囲の段落に適用）
+    /// </summary>
+    private void ApplyTextAlignment(TextAlignment alignment)
+    {
+        NoteRichTextBox.Focus();
+
+        var selection = NoteRichTextBox.Selection;
+        if (selection == null) return;
+
+        // 選択範囲の段落に TextAlignment を適用
+        selection.ApplyPropertyValue(Paragraph.TextAlignmentProperty, alignment);
+
+        UpdateToolbarState();
+    }
+
+    /// <summary>
+    /// 垂直配置トグルボタンクリック（上揃え ↔ 中央揃え）
+    /// 付箋単位の設定で、NoteStyle に保存される
+    /// </summary>
+    private void VerticalAlignButton_Click(object sender, RoutedEventArgs e)
+    {
+        var current = Model.Style.VerticalTextAlignment;
+        var next = current == "center" ? "top" : "center";
+        Model.Style.VerticalTextAlignment = next;
+        ApplyVerticalAlignment();
+        UpdateVerticalAlignButton();
+        NotifyStyleChanged();
+    }
+
+    /// <summary>
+    /// 垂直配置を RichTextBox に適用する
+    /// </summary>
+    private void ApplyVerticalAlignment()
+    {
+        NoteRichTextBox.VerticalContentAlignment = Model.Style.VerticalTextAlignment == "center"
+            ? VerticalAlignment.Center
+            : VerticalAlignment.Top;
+    }
+
+    /// <summary>
+    /// 垂直配置ボタンのアイコンを現在の状態に合わせて更新する
+    /// </summary>
+    private void UpdateVerticalAlignButton()
+    {
+        var isCenter = Model.Style.VerticalTextAlignment == "center";
+        VerticalAlignIcon.Text = isCenter ? "⬍" : "⬆";
+        VerticalAlignButton.ToolTip = isCenter ? "垂直: 中央揃え → 上揃えに変更" : "垂直: 上揃え → 中央揃えに変更";
+        SetToolbarButtonActive(VerticalAlignButton, isCenter);
+    }
+
     // --- 文字色パレット ---
 
     /// <summary>文字色ボタン → パレット Popup を開閉</summary>
@@ -812,9 +892,13 @@ public partial class NoteWindow : Window
             NoteRichTextBox.Document.FontFamily = fontFamily;
         }
 
-        Log.Debug("スタイル適用: {NoteId} (Bg={Cat}/{Color}, Opacity={Opacity}, Font={Font})",
+        // 4. Phase 15: 垂直配置（付箋単位）
+        ApplyVerticalAlignment();
+        UpdateVerticalAlignButton();
+
+        Log.Debug("スタイル適用: {NoteId} (Bg={Cat}/{Color}, Opacity={Opacity}, Font={Font}, VAlign={VAlign})",
             Model.NoteId, Model.Style.BgPaletteCategoryId, Model.Style.BgColorId,
-            Model.Style.Opacity0to100, Model.Style.FontFamilyName);
+            Model.Style.Opacity0to100, Model.Style.FontFamilyName, Model.Style.VerticalTextAlignment);
     }
 
     // --- スタイル Popup ---

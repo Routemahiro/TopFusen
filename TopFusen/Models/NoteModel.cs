@@ -88,4 +88,7 @@ public class NoteStyle
 
     /// <summary>フォントファミリー名（付箋単位）</summary>
     public string FontFamilyName { get; set; } = "Yu Gothic UI";
+
+    /// <summary>垂直テキスト配置（付箋単位）— "top" or "center"（Phase 15）</summary>
+    public string VerticalTextAlignment { get; set; } = "top";
 }

@@ -125,6 +125,50 @@
                                            Margin="2,-2,2,0"/>
                             </StackPanel>
                         </Button>
+                        <!-- Phase 15: 区切り線 + テキスト配置ボタン -->
+                        <Rectangle Width="1" Height="16" Fill="#33333333" Margin="3,0"/>
+                        <!-- 左揃え -->
+                        <Button x:Name="AlignLeftButton"
+                                Width="22" Height="22" Margin="1,0"
+                                Focusable="False" Cursor="Hand"
+                                Background="Transparent"
+                                BorderBrush="#44333333" BorderThickness="1"
+                                Click="AlignLeftButton_Click"
+                                ToolTip="左揃え">
+                            <Canvas Width="14" Height="12">
+                                <Rectangle Canvas.Left="0" Canvas.Top="1" Width="12" Height="2" Fill="#FF555555"/>
+                                <Rectangle Canvas.Left="0" Canvas.Top="5" Width="8" Height="2" Fill="#FF555555"/>
+                                <Rectangle Canvas.Left="0" Canvas.Top="9" Width="10" Height="2" Fill="#FF555555"/>
+                            </Canvas>
+                        </Button>
+                        <!-- 中央揃え -->
+                        <Button x:Name="AlignCenterButton"
+                                Width="22" Height="22" Margin="1,0"
+                                Focusable="False" Cursor="Hand"
+                                Background="Transparent"
+                                BorderBrush="#44333333" BorderThickness="1"
+                                Click="AlignCenterButton_Click"
+                                ToolTip="中央揃え">
+                            <Canvas Width="14" Height="12">
+                                <Rectangle Canvas.Left="1" Canvas.Top="1" Width="12" Height="2" Fill="#FF555555"/>
+                                <Rectangle Canvas.Left="3" Canvas.Top="5" Width="8" Height="2" Fill="#FF555555"/>
+                                <Rectangle Canvas.Left="2" Canvas.Top="9" Width="10" Height="2" Fill="#FF555555"/>
+                            </Canvas>
+                        </Button>
+                        <!-- 右揃え -->
+                        <Button x:Name="AlignRightButton"
+                                Width="22" Height="22" Margin="1,0"
+                                Focusable="False" Cursor="Hand"
+                                Background="Transparent"
+                                BorderBrush="#44333333" BorderThickness="1"
+                                Click="AlignRightButton_Click"
+                                ToolTip="右揃え">
+                            <Canvas Width="14" Height="12">
+                                <Rectangle Canvas.Left="2" Canvas.Top="1" Width="12" Height="2" Fill="#FF555555"/>
+                                <Rectangle Canvas.Left="6" Canvas.Top="5" Width="8" Height="2" Fill="#FF555555"/>
+                                <Rectangle Canvas.Left="4" Canvas.Top="9" Width="10" Height="2" Fill="#FF555555"/>
+                            </Canvas>
+                        </Button>
                     </StackPanel>
                 </DockPanel>
             </Border>
@@ -182,7 +226,7 @@
                             <TextBlock Text="🗑" FontSize="13" />
                         </Button>
                     </StackPanel>
-                    <!-- 左側: スタイル設定ボタン（Phase 6） -->
+                    <!-- 左側: スタイル設定ボタン（Phase 6）+ 垂直配置ボタン（Phase 15） -->
                     <StackPanel Orientation="Horizontal">
                         <Button x:Name="StyleButton"
                                 ToolTip="スタイル設定"
@@ -201,6 +245,21 @@
                                          Fill="#FFFBE38C"
                                          Stroke="#66333333" StrokeThickness="1"/>
                             </Grid>
+                        </Button>
+                        <!-- Phase 15: 垂直配置トグルボタン（上揃え ↔ 中央揃え） -->
+                        <Button x:Name="VerticalAlignButton"
+                                Width="26" Height="26"
+                                Margin="2,0"
+                                Cursor="Hand"
+                                Click="VerticalAlignButton_Click"
+                                Background="Transparent"
+                                BorderBrush="#44333333"
+                                BorderThickness="1"
+                                Focusable="False">
+                            <TextBlock x:Name="VerticalAlignIcon"
+                                       Text="⬆" FontSize="13"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                         </Button>
                     </StackPanel>
                 </DockPanel>

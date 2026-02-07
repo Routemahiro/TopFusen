@@ -239,6 +239,19 @@
                                    FontSize="11" Foreground="#FF888888"
                                    Margin="0,8,0,20"/>
 
+                        <!-- デバッグメニュー（Phase 15） -->
+                        <TextBlock Text="デバッグ" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="#FF333333" Margin="0,0,0,8"/>
+                        <TextBlock Text="有効にすると、トレイメニューに VD デバッグ項目が表示されます。&#x0a;通常は無効のままで問題ありません。"
+                                   FontSize="12" Foreground="#FF888888"
+                                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <CheckBox x:Name="DebugMenuCheckBox"
+                                  Content="トレイメニューにデバッグ項目を表示する"
+                                  FontSize="13"
+                                  Margin="0,0,0,20"
+                                  Checked="DebugMenuCheckBox_Changed"
+                                  Unchecked="DebugMenuCheckBox_Changed"/>
+
                         <!-- バージョン情報 -->
                         <TextBlock Text="バージョン情報" FontSize="14" FontWeight="SemiBold"
                                    Foreground="#FF333333" Margin="0,0,0,8"/>

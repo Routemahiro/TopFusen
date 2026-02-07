@@ -38,6 +38,9 @@ public class AppSettings
 
     /// <summary>自動起動の有効/無効</summary>
     public bool AutoStartEnabled { get; set; }
+
+    /// <summary>デバッグメニューをトレイに表示するか（Phase 15）</summary>
+    public bool DebugMenuEnabled { get; set; }
 }
 
 /// <summary>
