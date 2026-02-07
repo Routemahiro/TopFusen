@@ -532,6 +532,9 @@ public partial class NoteWindow : Window
     /// <summary>太字トグル（ツールバーボタン / Ctrl+B 共通）</summary>
     private void BoldButton_Click(object sender, RoutedEventArgs e)
     {
+        // 先にフォーカス確保（初回フォーカスの SelectionChanged で _pendingFormat がクリアされるのを防ぐ）
+        NoteRichTextBox.Focus();
+
         var selection = NoteRichTextBox.Selection;
         if (!selection.IsEmpty)
         {
@@ -553,12 +556,13 @@ public partial class NoteWindow : Window
                 isBold ? FontWeights.Normal : FontWeights.Bold;
         }
         UpdateToolbarState();
-        NoteRichTextBox.Focus();
     }
 
     /// <summary>下線トグル（ツールバーボタン / Ctrl+U 共通）</summary>
     private void UnderlineButton_Click(object sender, RoutedEventArgs e)
     {
+        NoteRichTextBox.Focus();
+
         var selection = NoteRichTextBox.Selection;
         if (!selection.IsEmpty)
         {
@@ -582,12 +586,13 @@ public partial class NoteWindow : Window
             _pendingFormat[Inline.TextDecorationsProperty] = newDecos;
         }
         UpdateToolbarState();
-        NoteRichTextBox.Focus();
     }
 
     /// <summary>取り消し線トグル（手動実装 — EditingCommands にないため）</summary>
     private void StrikethroughButton_Click(object sender, RoutedEventArgs e)
     {
+        NoteRichTextBox.Focus();
+
         var selection = NoteRichTextBox.Selection;
         if (!selection.IsEmpty)
         {
@@ -613,7 +618,6 @@ public partial class NoteWindow : Window
             _pendingFormat[Inline.TextDecorationsProperty] = newDecos;
         }
         UpdateToolbarState();
-        NoteRichTextBox.Focus();
     }
 
     /// <summary>
@@ -654,6 +658,8 @@ public partial class NoteWindow : Window
         if (_isUpdatingToolbar) return;
         if (FontSizeCombo.SelectedItem is int size)
         {
+            NoteRichTextBox.Focus();
+
             var selection = NoteRichTextBox.Selection;
             if (!selection.IsEmpty)
             {
@@ -664,7 +670,6 @@ public partial class NoteWindow : Window
                 _pendingFormat[TextElement.FontSizeProperty] = (double)size;
             }
             UpdateToolbarState();
-            NoteRichTextBox.Focus();
         }
     }
 
@@ -691,6 +696,8 @@ public partial class NoteWindow : Window
             var brush = new SolidColorBrush(color);
             brush.Freeze();
 
+            NoteRichTextBox.Focus();
+
             var selection = NoteRichTextBox.Selection;
             if (!selection.IsEmpty)
             {
@@ -704,7 +711,6 @@ public partial class NoteWindow : Window
             TextColorIndicator.Fill = brush;
             TextColorPopup.IsOpen = false;
             UpdateToolbarState();
-            NoteRichTextBox.Focus();
         }
     }
 
