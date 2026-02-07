@@ -288,3 +288,39 @@ NuGet パッケージ一覧:
 
 変更ファイル:
   - TopFusen/App.xaml.cs（VD サービス初期化 + スパイク検証メニュー追加）
+
+--- 2026-02-07 Phase 3.7: DJ-7 対応 — WS_EX_TOOLWINDOW → オーナーウィンドウ方式 ---
+
+背景: Phase 3.5 スパイクで WS_EX_TOOLWINDOW ウィンドウは仮想デスクトップ管理に参加しないことが判明（DJ-7）。
+Phase 4〜7 の大量改修前に基盤変更を確定させるため、前倒しで実施。
+
+[完了] P3.7-1: NoteManager にオーナーウィンドウ生成・管理を追加
+  - 非表示 Window（Width=0, Height=0, Visibility=Hidden, AllowsTransparency=True）
+  - WindowInteropHelper.EnsureHandle() で Show せずに HWND を確保
+  - NoteWindow 作成時（CreateNote / DuplicateNote）に window.Owner = _ownerWindow を設定
+  - CloseAllWindows: Owner 解除 → 子ウィンドウ Close → オーナー Close の順序で安全に終了
+  - App.xaml.cs の OnStartup で _noteManager.InitializeOwnerWindow() を呼び出し
+
+[完了] P3.7-2: NoteWindow から WS_EX_TOOLWINDOW を除去
+  - OnSourceInitialized から WS_EX_TOOLWINDOW 付与 + WS_EX_APPWINDOW 除去を削除
+  - 代わりに WS_EX_TOOLWINDOW が付いていたら外す処理に変更（念のため）
+  - Owner + ShowInTaskbar=false で Alt+Tab 非表示が成立
+  - クリック透過（三重制御: WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WM_NCHITTEST）はそのまま維持
+
+[検証待ち] P3.7-VERIFY: DJ-7 検証
+  - ビルド成功（エラー0、警告0）を確認済み
+  - 以下はユーザー実機で検証予定:
+    ☐ Alt+Tab に付箋が出ない
+    ☐ タスクバーに付箋が出ない
+    ☐ GetWindowDesktopId が有効な GUID を返す（Guid.Empty ではない）
+    ☐ MoveWindowToDesktop で実際に付箋が別デスクトップへ移動する
+    ☐ クリック透過（三重制御）が引き続き正常
+    ☐ Topmost が維持されている
+    ☐ AllowsTransparency + Owner の組み合わせで問題なし
+    ☐ ドラッグ移動・リサイズが正常
+    ☐ 複数付箋の選択状態管理が正常
+
+変更ファイル:
+  - TopFusen/Services/NoteManager.cs（オーナーウィンドウ生成・管理 + Owner 設定）
+  - TopFusen/Views/NoteWindow.xaml.cs（WS_EX_TOOLWINDOW 除去 + コメント更新）
+  - TopFusen/App.xaml.cs（InitializeOwnerWindow 呼び出し追加）
