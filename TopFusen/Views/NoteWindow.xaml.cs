@@ -109,6 +109,8 @@ public partial class NoteWindow : Window
 
         InitializeComponent();
         InitializeToolbar(); // Phase 4: ツールバー初期化
+        InitializeStyleControls(); // Phase 6: スタイル制御イベント登録
+        ApplyStyle(); // Phase 6: Model.Style を UI に反映
 
         // 初期位置・サイズの適用
         Left = model.Placement.DipX;
@@ -276,10 +278,11 @@ public partial class NoteWindow : Window
             Keyboard.ClearFocus();
         }
 
-        // Phase 4: ポップアップを閉じる（UI非表示時）
+        // Phase 4/6: ポップアップを閉じる（UI非表示時）
         if (!showUI)
         {
             TextColorPopup.IsOpen = false;
+            StylePopup.IsOpen = false;
         }
     }
 
@@ -733,6 +736,261 @@ public partial class NoteWindow : Window
             TextColorPopup.IsOpen = false;
             UpdateToolbarState();
         }
+    }
+
+    // ==========================================
+    //  Phase 6: スタイル制御（FR-STYLE / FR-FONT）
+    // ==========================================
+
+    /// <summary>フォント許可リスト（NoteManager から設定される）</summary>
+    private IReadOnlyList<string> _fontAllowList = new List<string> { "Yu Gothic UI" };
+
+    /// <summary>スタイルUI更新中フラグ（フィードバックループ防止）</summary>
+    private bool _isUpdatingStyle;
+
+    /// <summary>
+    /// フォント許可リストを設定する（NoteManager から呼ばれる）
+    /// </summary>
+    public void SetFontAllowList(IReadOnlyList<string> fonts)
+    {
+        _fontAllowList = fonts;
+    }
+
+    /// <summary>
+    /// スタイル関連のイベントを登録する（コンストラクタから呼ばれる）
+    /// ※ XAML ではなくコードで登録し、InitializeComponent 中の不要なイベント発火を防ぐ
+    /// </summary>
+    private void InitializeStyleControls()
+    {
+        OpacitySlider.ValueChanged += OpacitySlider_ValueChanged;
+        FontFamilyCombo.SelectionChanged += FontFamilyCombo_SelectionChanged;
+        VividCategoryRadio.Checked += BgPaletteCategory_Changed;
+        NaturalCategoryRadio.Checked += BgPaletteCategory_Changed;
+    }
+
+    /// <summary>
+    /// Model.Style の値を UI に反映する（背景色 + 不透明度 + フォント）
+    /// 作成時・復元時・スタイル変更時に呼ばれる
+    /// </summary>
+    public void ApplyStyle()
+    {
+        // 1. 背景色 + 不透明度（背景の Alpha チャネルで制御 — テキスト・枠は不透明のまま）
+        var hexColor = PaletteDefinitions.GetHexColor(
+            Model.Style.BgPaletteCategoryId, Model.Style.BgColorId)
+            ?? PaletteDefinitions.DefaultHexColor;
+
+        try
+        {
+            var baseColor = (Color)ColorConverter.ConvertFromString(hexColor);
+            var alpha = (byte)Math.Clamp(Model.Style.Opacity0to100 * 255 / 100, 0, 255);
+            var bgColor = Color.FromArgb(alpha, baseColor.R, baseColor.G, baseColor.B);
+            var bgBrush = new SolidColorBrush(bgColor);
+            bgBrush.Freeze();
+            NoteBorder.Background = bgBrush;
+        }
+        catch
+        {
+            // フォールバック: デフォルト黄色（不透明）
+            NoteBorder.Background = new SolidColorBrush(Color.FromRgb(0xFB, 0xE3, 0x8C));
+        }
+
+        // 2. スタイルカラーインジケータ更新（下部バーの丸いアイコン）
+        try
+        {
+            var indicatorColor = (Color)ColorConverter.ConvertFromString(hexColor);
+            var indicatorBrush = new SolidColorBrush(indicatorColor);
+            indicatorBrush.Freeze();
+            StyleColorIndicator.Fill = indicatorBrush;
+        }
+        catch { /* ignore */ }
+
+        // 3. フォント（付箋単位）
+        var fontFamily = new FontFamily(Model.Style.FontFamilyName);
+        NoteRichTextBox.FontFamily = fontFamily;
+        if (NoteRichTextBox.Document != null)
+        {
+            NoteRichTextBox.Document.FontFamily = fontFamily;
+        }
+
+        Log.Debug("スタイル適用: {NoteId} (Bg={Cat}/{Color}, Opacity={Opacity}, Font={Font})",
+            Model.NoteId, Model.Style.BgPaletteCategoryId, Model.Style.BgColorId,
+            Model.Style.Opacity0to100, Model.Style.FontFamilyName);
+    }
+
+    // --- スタイル Popup ---
+
+    /// <summary>スタイル設定ボタンクリック → Popup 開閉</summary>
+    private void StyleButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (StylePopup.IsOpen)
+        {
+            StylePopup.IsOpen = false;
+            return;
+        }
+
+        SyncStylePopup();
+        StylePopup.IsOpen = true;
+    }
+
+    /// <summary>スタイル Popup の UI を現在の Model.Style に同期する</summary>
+    private void SyncStylePopup()
+    {
+        _isUpdatingStyle = true;
+        try
+        {
+            // カテゴリラジオ
+            VividCategoryRadio.IsChecked = Model.Style.BgPaletteCategoryId == "vivid";
+            NaturalCategoryRadio.IsChecked = Model.Style.BgPaletteCategoryId != "vivid";
+
+            // 色グリッド
+            PopulateBgColorGrid(Model.Style.BgPaletteCategoryId);
+
+            // 不透明度スライダー
+            OpacitySlider.Value = Model.Style.Opacity0to100;
+            OpacityValueText.Text = $"{Model.Style.Opacity0to100}%";
+
+            // フォント ComboBox
+            FontFamilyCombo.Items.Clear();
+            foreach (var font in _fontAllowList)
+            {
+                FontFamilyCombo.Items.Add(font);
+            }
+            FontFamilyCombo.SelectedItem = Model.Style.FontFamilyName;
+
+            // 現在のフォントが許可リストにない場合は一時的に追加
+            if (FontFamilyCombo.SelectedItem == null && !string.IsNullOrEmpty(Model.Style.FontFamilyName))
+            {
+                FontFamilyCombo.Items.Insert(0, Model.Style.FontFamilyName);
+                FontFamilyCombo.SelectedItem = Model.Style.FontFamilyName;
+            }
+        }
+        finally
+        {
+            _isUpdatingStyle = false;
+        }
+    }
+
+    /// <summary>背景色グリッドを指定カテゴリの色で再構築する</summary>
+    private void PopulateBgColorGrid(string categoryId)
+    {
+        BgColorGrid.Children.Clear();
+        var category = PaletteDefinitions.Categories.FirstOrDefault(c => c.Id == categoryId);
+        if (category == null) return;
+
+        foreach (var paletteColor in category.Colors)
+        {
+            var isSelected = Model.Style.BgPaletteCategoryId == categoryId
+                             && Model.Style.BgColorId == paletteColor.Id;
+
+            var btn = new Button
+            {
+                Width = 28,
+                Height = 28,
+                Margin = new Thickness(2),
+                Cursor = Cursors.Hand,
+                Focusable = false,
+                Tag = $"{categoryId}:{paletteColor.Id}",
+                ToolTip = paletteColor.DisplayName,
+            };
+
+            try
+            {
+                var color = (Color)ColorConverter.ConvertFromString(paletteColor.HexColor);
+                var brush = new SolidColorBrush(color);
+                brush.Freeze();
+                btn.Background = brush;
+            }
+            catch
+            {
+                btn.Background = Brushes.Gray;
+            }
+
+            if (isSelected)
+            {
+                btn.BorderBrush = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33));
+                btn.BorderThickness = new Thickness(2.5);
+            }
+            else
+            {
+                btn.BorderBrush = new SolidColorBrush(Color.FromRgb(0xBB, 0xBB, 0xBB));
+                btn.BorderThickness = new Thickness(1);
+            }
+
+            btn.Click += BgColorSwatch_Click;
+            BgColorGrid.Children.Add(btn);
+        }
+    }
+
+    /// <summary>背景色カテゴリ変更（ラジオボタン）</summary>
+    private void BgPaletteCategory_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingStyle) return;
+        var categoryId = VividCategoryRadio.IsChecked == true ? "vivid" : "natural";
+        PopulateBgColorGrid(categoryId);
+    }
+
+    /// <summary>背景色スウォッチクリック → 背景色を変更して即時反映</summary>
+    private void BgColorSwatch_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not string tag) return;
+
+        var parts = tag.Split(':');
+        if (parts.Length != 2) return;
+
+        Model.Style.BgPaletteCategoryId = parts[0];
+        Model.Style.BgColorId = parts[1];
+
+        ApplyStyle();
+        PopulateBgColorGrid(parts[0]); // 選択ハイライト更新
+        NotifyStyleChanged();
+    }
+
+    /// <summary>不透明度スライダー変更 → 即時反映</summary>
+    private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isUpdatingStyle) return;
+        if (OpacityValueText == null) return; // InitializeComponent 完了前
+
+        var opacity = (int)OpacitySlider.Value;
+        Model.Style.Opacity0to100 = opacity;
+        OpacityValueText.Text = $"{opacity}%";
+        ApplyStyle();
+        NotifyStyleChanged();
+    }
+
+    /// <summary>フォント ComboBox 変更 → 付箋全体のフォントを変更</summary>
+    private void FontFamilyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingStyle) return;
+        if (FontFamilyCombo.SelectedItem is not string fontName) return;
+
+        Model.Style.FontFamilyName = fontName;
+        ApplyStyle();
+
+        // ドキュメント全体にフォントを適用（付箋単位フォント — FR-FONT）
+        ApplyFontToDocument(fontName);
+
+        NotifyStyleChanged();
+    }
+
+    /// <summary>ドキュメント全体にフォントを適用する（付箋単位フォント変更時）</summary>
+    private void ApplyFontToDocument(string fontFamilyName)
+    {
+        var doc = NoteRichTextBox.Document;
+        if (doc == null) return;
+
+        var noteFont = new FontFamily(fontFamilyName);
+        var fullRange = new TextRange(doc.ContentStart, doc.ContentEnd);
+        fullRange.ApplyPropertyValue(TextElement.FontFamilyProperty, noteFont);
+
+        Log.Debug("フォント変更（全体適用）: {NoteId} → {Font}", Model.NoteId, fontFamilyName);
+    }
+
+    /// <summary>スタイル変更を通知する（デバウンス保存トリガー）</summary>
+    private void NotifyStyleChanged()
+    {
+        if (!_isTrackingChanges) return;
+        NoteChanged?.Invoke(Model.NoteId);
     }
 
     // --- P4-6: クリップボード + フォント正規化 ---

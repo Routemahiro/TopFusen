@@ -306,6 +306,10 @@ public class NoteManager
         _notes.Add((model, window));
         window.Show();
 
+        // Phase 6: フォント許可リストを設定 + スタイル適用
+        window.SetFontAllowList(_appSettings.FontAllowList);
+        window.ApplyStyle();
+
         // RTF コンテンツの復元
         var rtfBytes = _persistence.LoadRtf(model.NoteId);
         if (rtfBytes != null && rtfBytes.Length > 0)
@@ -397,6 +401,9 @@ public class NoteManager
         // イベント購読
         WireUpNoteEvents(window);
 
+        // Phase 6: フォント許可リストを設定
+        window.SetFontAllowList(_appSettings.FontAllowList);
+
         _notes.Add((model, window));
         window.Show();
 
@@ -472,6 +479,9 @@ public class NoteManager
         {
             window.Owner = _ownerWindow;
         }
+
+        // Phase 6: フォント許可リストを設定
+        window.SetFontAllowList(_appSettings.FontAllowList);
 
         // イベント購読
         WireUpNoteEvents(window);
