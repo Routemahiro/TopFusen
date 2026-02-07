@@ -314,7 +314,90 @@ public class VirtualDesktopService : IDisposable
     }
 
     // ==========================================
-    //  P8.0-2: VD Tracker Window
+    //  P8-6: デスクトップ喪失フォールバック
+    // ==========================================
+
+    /// <summary>
+    /// 指定された DesktopId が現在のシステムに存在するか検証する（P8-6）
+    /// 
+    /// 検証方法:
+    ///   1. Registry の VirtualDesktopIDs 一覧に含まれているか
+    ///   2. 一覧が空（VD が1つだけ）の場合は「不明」→ 現在VDと比較
+    /// 
+    /// 戻り値: true=存在する / false=存在しない / null=判定不能（VD利用不可）
+    /// </summary>
+    public bool? IsDesktopAlive(Guid desktopId)
+    {
+        if (!IsAvailable) return null;
+        if (desktopId == Guid.Empty) return false;
+
+        // Registry から現在の VD 一覧を取得
+        var desktops = GetDesktopListFromRegistry();
+
+        if (desktops.Count > 0)
+        {
+            // 一覧がある場合: 含まれていれば存在する
+            return desktops.Any(d => d.Id == desktopId);
+        }
+
+        // 一覧が空 = VD が1つだけ、または Registry が空
+        // → 現在の VD ID と一致すれば存在する
+        var currentId = GetCurrentDesktopIdFast();
+        if (currentId.HasValue)
+        {
+            return desktopId == currentId.Value;
+        }
+
+        return null; // 判定不能
+    }
+
+    /// <summary>
+    /// 複数の DesktopId を一括検証し、存在しないものを返す（P8-6: 起動時バッチ処理用）
+    /// </summary>
+    public HashSet<Guid> FindOrphanedDesktopIds(IEnumerable<Guid> desktopIds)
+    {
+        var orphaned = new HashSet<Guid>();
+        if (!IsAvailable) return orphaned;
+
+        // Registry から現在の VD 一覧を取得（1回だけ）
+        var desktops = GetDesktopListFromRegistry();
+        var currentId = GetCurrentDesktopIdFast();
+
+        if (desktops.Count > 0)
+        {
+            var aliveSet = new HashSet<Guid>(desktops.Select(d => d.Id));
+            foreach (var id in desktopIds)
+            {
+                if (id != Guid.Empty && !aliveSet.Contains(id))
+                {
+                    orphaned.Add(id);
+                }
+            }
+        }
+        else if (currentId.HasValue)
+        {
+            // VD 一覧が空（1つだけ）の場合: 現在 VD 以外は孤立とみなす
+            foreach (var id in desktopIds)
+            {
+                if (id != Guid.Empty && id != currentId.Value)
+                {
+                    orphaned.Add(id);
+                }
+            }
+        }
+        // else: 判定不能 → 孤立なしとして扱う（安全側）
+
+        if (orphaned.Count > 0)
+        {
+            Log.Information("[VD] 孤立デスクトップ検出: {Count}件 ({Ids})",
+                orphaned.Count, string.Join(", ", orphaned));
+        }
+
+        return orphaned;
+    }
+
+    // ==========================================
+    //  VD Tracker Window
     // ==========================================
 
     /// <summary>

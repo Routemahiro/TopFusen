@@ -276,7 +276,10 @@ public class NoteManager
             RestoreNote(model);
         }
 
-        // 4. 孤立 RTF ファイルの掃除
+        // 4. P8-6: デスクトップ喪失フォールバック — 存在しない VD に所属する付箋を現在VDに救済
+        RescueOrphanedNotes();
+
+        // 5. 孤立 RTF ファイルの掃除
         var validIds = new HashSet<Guid>(_notes.Select(n => n.Model.NoteId));
         _persistence.CleanupOrphanedRtfFiles(validIds);
 
@@ -636,6 +639,57 @@ public class NoteManager
 
         Log.Information("デスクトップ切替処理: VD={DesktopId}, 表示={Uncloak}, 非表示={Cloak}, EditMode={EditMode}",
             currentDesktopId, uncloakCount, cloakCount, IsEditMode);
+    }
+
+    // ==========================================
+    //  P8-6: デスクトップ喪失フォールバック
+    // ==========================================
+
+    /// <summary>
+    /// 起動時に孤立付箋を救済する（P8-6）
+    /// 保存された DesktopId が現在のシステムに存在しない場合、現在の VD に付替え + Uncloak
+    /// </summary>
+    private void RescueOrphanedNotes()
+    {
+        if (!_vdService.IsAvailable) return;
+
+        var desktopIds = _notes
+            .Where(n => n.Model.DesktopId != Guid.Empty)
+            .Select(n => n.Model.DesktopId)
+            .Distinct();
+
+        var orphanedIds = _vdService.FindOrphanedDesktopIds(desktopIds);
+        if (orphanedIds.Count == 0) return;
+
+        var currentDesktop = _vdService.GetCurrentDesktopIdFast();
+        if (!currentDesktop.HasValue) return;
+
+        var rescuedCount = 0;
+        foreach (var (model, window) in _notes)
+        {
+            if (orphanedIds.Contains(model.DesktopId))
+            {
+                var oldId = model.DesktopId;
+                model.DesktopId = currentDesktop.Value;
+
+                // Cloak されている可能性があるので Uncloak
+                var hwnd = new WindowInteropHelper(window).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    VirtualDesktopService.UncloakWindow(hwnd);
+                }
+
+                rescuedCount++;
+                Log.Information("P8-6 孤立付箋救済: {NoteId} (旧VD={OldId} → 現在VD={NewId})",
+                    model.NoteId, oldId, currentDesktop.Value);
+            }
+        }
+
+        if (rescuedCount > 0)
+        {
+            _persistence.ScheduleSave();
+            Log.Information("P8-6 孤立付箋救済完了: {Count}枚を現在VDに移動", rescuedCount);
+        }
     }
 
     // ==========================================
