@@ -789,3 +789,34 @@ Phase 11 実装完了（ビルド成功・Lint クリーン）。P11-VERIFY は�
     - Initialize に HideHotkey を渡すように変更
 
 ビルド成功・Lint クリーン。P14-VERIFY は手動検証待ち。
+
+==========================================
+Phase 15: デバッグメニュー設定制御 + テキスト配置 + 後回し.md整理
+==========================================
+日付: 2026-02-07
+
+[P15-1] デバッグメニューの設定制御（案B）
+  - AppSettings に DebugMenuEnabled: bool 追加（デフォルト: false）
+  - SettingsWindow 詳細タブに CheckBox「トレイメニューにデバッグ項目を表示する」追加
+  - App.xaml.cs CreateTrayContextMenu() 内で DebugMenuEnabled を確認し、条件付きでデバッグメニュー3項目を表示
+  - RebuildTrayMenu() public メソッド追加: 設定変更時にトレイメニューを即時再構築
+  - SettingsWindow から Application.Current を経由して RebuildTrayMenu() を呼び出し
+
+[P15-2] テキスト配置機能（案B — 水平3方向 + 垂直2方向）
+  - 水平配置: 左揃え / 中央揃え / 右揃え
+    - ツールバー右端にアイコンボタン3つ追加（Canvas で線描画）
+    - Paragraph.TextAlignmentProperty で段落単位に適用
+    - RTF に含まれるため追加保存不要
+    - UpdateToolbarState() で選択段落に応じてボタンハイライト
+  - 垂直配置: 上揃え / 中央揃え（付箋単位）
+    - NoteStyle に VerticalTextAlignment: string（"top" / "center"）追加
+    - 下部バーにトグルボタン追加（⬆ 上揃え ↔ ⬍ 中央揃え）
+    - RichTextBox.VerticalContentAlignment で制御
+    - ApplyStyle() で起動時に復元
+    - NoteStyle に保存 → settings.json 経由で永続化
+
+[P15-3] 後回し.md §3 を Phase 13 修正済みに更新
+  - 旧: 推定原因候補 + 次回対応方針
+  - 新: 修正済みの3件のBUG詳細を記載
+
+ビルド成功・Lint クリーン。P15-VERIFY は手動検証待ち。
