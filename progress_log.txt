@@ -589,3 +589,25 @@ DJ-10 方針: WS_EX_TRANSPARENT + DWMWA_CLOAK + DispatcherTimer ポーリング
   8. 起動直後から正しい VD に配置 ... OK（Fix1 後）
 
 Phase 8.0 スパイク: 技術的実現性を確認。DJ-10 方式の有効性が実証された。
+
+--- 2026-02-07 Phase 8 本実装（案B: バランス）---
+
+[P8-6] デスクトップ喪失フォールバック
+  - VirtualDesktopService.IsDesktopAlive() — 単一 VD 存在チェック
+  - VirtualDesktopService.FindOrphanedDesktopIds() — 一括孤立検出
+  - NoteManager.RescueOrphanedNotes() — 起動時一括救済
+  - HandleDesktopSwitch にリアルタイム救済追加（ただし動作せず → 後回し.md）
+  - 実機検証: 起動時救済 OK / VD 1つ環境 OK
+
+[P8-7] ポーリング間隔最適化
+  - 300ms → 500ms（CPU負荷軽減、体感遅延なし確認済み）
+
+[P8-8] スパイクコード整理
+  - コメント・ログ: Phase 8.0 → Phase 8 統一
+  - デバッグメニュー: ラベル簡潔化
+
+[後回し] VD 削除時のリアルタイム救済が動作しない
+  - 再起動で復旧可能（実害限定的）
+  - 詳細: 引き継ぎ資料置き場/後回し.md
+
+Phase 8 完了。次は Phase 6（見た目・スタイル）。
