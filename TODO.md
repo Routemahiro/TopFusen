@@ -510,33 +510,43 @@
 
 ---
 
-## Phase 8: 仮想デスクトップ対応（FR-VDSK）★ Phase 8.0 スパイク後に本格実装
+## Phase 8: 仮想デスクトップ対応（FR-VDSK）🔧 作業中
 > 目標: デスクトップ単位で付箋が分離・復元される
 > ※ Phase 3.5 → Phase 8.0 で DJ-10 方式の検証済み → ここで本格実装
 > ★ Phase 6/7 より前倒しで実装する（クリック透過と VD 追跡の矛盾を早期解決）
 
-- [ ] P8-1: Phase 3.5 のスパイクコードを正式実装へ昇格
-  - IVirtualDesktopManager ラッパー（Services/VirtualDesktopService.cs）
+- [x] P8-1: スパイクコードを正式実装へ昇格 (Phase 8.0 で実装済み)
+  - IVirtualDesktopManager ラッパー（VirtualDesktopService.cs）
   - COM 初期化失敗時の graceful 無効化
-  - **★ DJ-7 対応: WS_EX_TOOLWINDOW → オーナーウィンドウ方式に変更**
-    - 非表示オーナー Window を作成し、NoteWindow.Owner に設定
-    - WS_EX_TOOLWINDOW を除去 → 仮想デスクトップ管理に参加可能にする
-- [ ] P8-2: 現在デスクトップID取得の安定実装（短命ウィンドウ方式）
-- [ ] P8-3: Registry — デスクトップ一覧取得（ベストエフォート）
-  - VirtualDesktopIDs byte[] → GUID[] パース
-  - 名前取得（Desktops\{guid}\Name）
-  - **取得失敗 → 現在デスクトップのみ扱い** ← 明記
-- [ ] P8-4: 付箋作成時に現在デスクトップIDを付与
-- [ ] P8-5: 復元時に MoveWindowToDesktop で所属デスクトップへ移動
-- [ ] P8-6: デスクトップ喪失フォールバック
-  - Desktop 1 へ移動 → 無理なら現在デスクトップ → クランプ
+  - DJ-7: オーナーウィンドウ方式（Phase 3.7 で実装済み）
+  - DJ-10: DWMWA_CLOAK + VD Tracker Window + ポーリング
+- [x] P8-2: 現在デスクトップID取得の安定実装 (Phase 8.0 で実装済み)
+  - 3段階取得: Tracker HWND → Registry → 短命ウィンドウ
+- [x] P8-3: Registry デスクトップ一覧取得（ベストエフォート）(Phase 8.0 で実装済み)
+  - VirtualDesktopIDs byte[] → GUID[] パース + 名前取得
+  - 取得失敗 → 現在デスクトップのみ扱い
+- [x] P8-4: 付箋作成時に現在デスクトップIDを付与 (Phase 8.0 で実装済み)
+- [x] P8-5: 復元時の VD 振り分け (Phase 8.0 で DJ-10 方式に変更)
+  - MoveWindowToDesktop → DWMWA_CLOAK 自前管理に変更
+  - RestoreNote 内で非現在VD付箋を Cloak
+- [ ] P8-6: デスクトップ喪失フォールバック ← **★ 本実装の主対象**
+  - 起動時: 保存 DesktopId を Registry 一覧と照合 → 存在しなければ現在VDに付替
+  - HandleDesktopSwitch: 孤立付箋（どの VD にも属さない）を現在 VD に救済
+  - VD が1つだけの場合: Registry 一覧が空でも正常動作（全付箋を表示）
+- [ ] P8-7: ポーリング間隔最適化 ← **★ 案B 追加**
+  - 300ms → 500ms に変更（CPU 負荷軽減）
+  - 将来的に RegNotifyChangeKeyValue への切替を検討（Phase 8 では見送り）
+- [ ] P8-8: スパイクコード整理 ← **★ 案B 追加**
+  - コメント・ログの「Phase 8.0」→「Phase 8」統一
+  - デバッグメニューをスパイク検証用から正式デバッグ機能に格上げ
 - [ ] **P8-VERIFY: Phase 8 検証**
   - [ ] Desktop A で作成した付箋が Desktop B で見えない
   - [ ] Desktop B で作成した付箋が Desktop A で見えない
   - [ ] 再起動後も所属デスクトップに復元される
-  - [ ] デスクトップ削除後に起動 → フォールバックで見失わない
+  - [ ] **デスクトップ削除後に起動 → フォールバックで見失わない** ← P8-6 の核心
+  - [ ] **VD 1つだけの環境でも正常動作** ← P8-6
   - [ ] 仮想デスクトップが1つだけの場合でも正常動作
-  - [ ] **COM 初期化失敗時にアプリがクラッシュせず、付箋が現在デスクトップで表示される** ← NEW
+  - [ ] COM 初期化失敗時にアプリがクラッシュせず、付箋が現在デスクトップで表示される
 
 ---
 
@@ -734,7 +744,7 @@
 | Phase 6 | 見た目・スタイル | 未着手 |
 | Phase 7 | マルチモニタ | 未着手 |
 | Phase 8.0 | VD 自前管理 技術スパイク | ✅ 完了 (2026-02-07) |
-| Phase 8 | 仮想デスクトップ | ★ 前倒し（8.0 スパイク後） |
+| Phase 8 | 仮想デスクトップ | 🔧 作業中 |
 | Phase 9 | Z順管理 | 未着手 |
 | Phase 10 | 非表示 + ホットキー + 自動起動 | 未着手 |
 | Phase 11 | 設定画面 | 未着手 |
