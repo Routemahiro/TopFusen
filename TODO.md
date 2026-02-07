@@ -340,27 +340,32 @@
 
 ---
 
-## Phase 5: 永続化（FR-PERSIST）
+## Phase 5: 永続化（FR-PERSIST） ✅ (2026-02-07 完了)
 > 目標: 再起動後に付箋が完全復元される
+> 実装方針: **案B（PRD仕様準拠）** — Atomic Write + デバウンス + 破損検知フォールバック
 
-- [ ] P5-1: Persistence サービス実装
+- [x] P5-1: Persistence サービス実装 (2026-02-07 完了)
   - 保存先: %LocalAppData%\TopFusen\TopFusen\
-- [ ] P5-2: notes.json 保存/読込（全 Note メタデータ）
-- [ ] P5-3: notes/{NoteId}.rtf 保存/読込（RTF本文）
-- [ ] P5-4: settings.json 保存/読込（AppSettings）
-- [ ] P5-5: Atomic Write 実装（tmp → File.Replace → .bak 生成）
-- [ ] P5-6: 破損検知 + .bak フォールバック + ユーザー通知
-- [ ] P5-7: デバウンス保存（3秒）— テキスト/移動/リサイズ/スタイル変更時
-- [ ] P5-8: 終了時の強制フラッシュ（FR-TRAY-5 連携）
-- [ ] **P5-9: SessionEnding / Application.Exit フック** ← NEW
+  - PersistenceService.cs: JSON/RTF ファイル I/O + Atomic Write + デバウンス + 破損検知
+- [x] P5-2: notes.json 保存/読込（全 Note メタデータ）(2026-02-07 完了)
+- [x] P5-3: notes/{NoteId}.rtf 保存/読込（RTF本文）(2026-02-07 完了)
+  - NoteWindow.GetRtfBytes() / LoadRtfBytes() で TextRange.Save/Load
+- [x] P5-4: settings.json 保存/読込（AppSettings）(2026-02-07 完了)
+- [x] P5-5: Atomic Write 実装（tmp → File.Replace → .bak 生成）(2026-02-07 完了)
+- [x] P5-6: 破損検知 + .bak フォールバック + ユーザー通知 (2026-02-07 完了)
+  - LoadJsonWithFallback<T> で自動フォールバック + MessageBox 通知
+- [x] P5-7: デバウンス保存（3秒）— テキスト/移動/リサイズ変更時 (2026-02-07 完了)
+  - DispatcherTimer（UIスレッド） + NoteChanged イベント連動
+- [x] P5-8: 終了時の強制フラッシュ（FR-TRAY-5 連携）(2026-02-07 完了)
+- [x] **P5-9: SessionEnding / Application.Exit フック** (2026-02-07 完了)
   - Windows ログオフ / シャットダウン時にも確実に同期保存
-  - Application.Current.SessionEnding += で保存フラッシュ
-  - Atomic Write（P5-5）により、保存途中で落ちても破損しない
-- [ ] P5-10: 起動時ロード → NoteManager で復元
+  - OnExit: FlushSave() → CloseAllWindows()（ウィンドウ閉じる前に保存）
+- [x] P5-10: 起動時ロード → NoteManager.LoadAll() で復元 (2026-02-07 完了)
   - 起動直後は必ず編集OFF（FR-BOOT-2）
-- [ ] **P5-11: 削除時のファイル掃除** ← NEW
-  - DeleteNote 時: notes.json からエントリ削除 + notes/{NoteId}.rtf 削除 + 即時保存
-  - 起動時: notes.json に無い孤立 RTF ファイルを検知 → 削除（ゴミ掃除）
+  - RestoreNote(): NoteWindow 作成 → RTF読込 → 編集OFF → 変更追跡有効化
+- [x] **P5-11: 削除時のファイル掃除** (2026-02-07 完了)
+  - DeleteNote 時: RTFファイル削除 + ScheduleSave()
+  - 起動時: CleanupOrphanedRtfFiles() で孤立RTF自動削除
 - [ ] **P5-VERIFY: Phase 5 検証**
   - [ ] 付箋を作成して内容を書く → アプリ終了 → 再起動で内容が復元される
   - [ ] 位置/サイズを変更 → 再起動で復元される
@@ -369,8 +374,8 @@
   - [ ] .bak ファイルが存在する
   - [ ] settings.json を壊す → 起動時に .bak から復旧し通知が出る
   - [ ] デバウンス: 連続変更が1回の保存にまとまる（ログで確認）
-  - [ ] **付箋削除 → 再起動 → 復元されない + RTFファイルも消えている** ← NEW
-  - [ ] **孤立RTFファイルを手動配置 → 起動時に掃除される** ← NEW
+  - [ ] **付箋削除 → 再起動 → 復元されない + RTFファイルも消えている**
+  - [ ] **孤立RTFファイルを手動配置 → 起動時に掃除される**
 
 ---
 
@@ -670,7 +675,7 @@
 | Phase 3.5 | 仮想デスクトップ技術スパイク | ✅ 完了 (2026-02-07) |
 | Phase 3.7 | DJ-7: オーナーウィンドウ方式変更 | ✅ 完了 (2026-02-07) |
 | Phase 4 | リッチテキスト編集 | ✅ 完了 (2026-02-07) |
-| Phase 5 | 永続化 | 🔧 作業中 |
+| Phase 5 | 永続化 | ✅ 完了 (2026-02-07) |
 | Phase 6 | 見た目・スタイル | 未着手 |
 | Phase 7 | マルチモニタ | 未着手 |
 | Phase 8 | 仮想デスクトップ | 未着手 |
