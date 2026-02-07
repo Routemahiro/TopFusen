@@ -128,8 +128,10 @@ public partial class NoteWindow : Window
     // ==========================================
 
     /// <summary>
-    /// HWND 生成後に拡張スタイルとメッセージフックを適用
+    /// HWND 生成後にメッセージフックを適用
     /// DJ-7: WS_EX_TOOLWINDOW は除去（オーナーウィンドウ方式で Alt+Tab 非表示を実現）
+    /// DJ-9: WS_EX_TRANSPARENT / WS_EX_NOACTIVATE は使用しない（VD追跡を破壊するため）
+    ///       クリック透過は WM_NCHITTEST → HTTRANSPARENT のみで実現する
     /// </summary>
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
@@ -143,26 +145,26 @@ public partial class NoteWindow : Window
         // 念のため TOOLWINDOW が付いていたら外す
         exStyle &= ~NativeMethods.WS_EX_TOOLWINDOW;
 
-        // 初期クリック透過状態の適用（三重制御の一部）
-        if (_initialClickThrough)
-        {
-            exStyle |= NativeMethods.WS_EX_TRANSPARENT;
-            exStyle |= NativeMethods.WS_EX_NOACTIVATE;
-        }
+        // DJ-9: WS_EX_TRANSPARENT / WS_EX_NOACTIVATE も使わない
+        // これらのスタイルは OS の仮想デスクトップ追跡を破壊する（生成後に付けても同様）
+        // クリック透過は WM_NCHITTEST フックのみで実現する
+        exStyle &= ~NativeMethods.WS_EX_TRANSPARENT;
+        exStyle &= ~NativeMethods.WS_EX_NOACTIVATE;
 
         NativeMethods.SetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE, exStyle);
         _isClickThrough = _initialClickThrough;
 
-        // WM_NCHITTEST メッセージフックを登録（三重制御の一部）
+        // WM_NCHITTEST メッセージフックを登録（DJ-9: クリック透過の唯一の制御手段）
         _hwndSource?.AddHook(WndProc);
 
-        Log.Information("NoteWindow 拡張スタイル適用: {NoteId} (ClickThrough={ClickThrough}, ExStyle=0x{ExStyle:X8}, HasOwner={HasOwner})",
+        Log.Information("NoteWindow 初期化: {NoteId} (ClickThrough={ClickThrough}, ExStyle=0x{ExStyle:X8}, HasOwner={HasOwner})",
             Model.NoteId, _isClickThrough, exStyle, Owner != null);
     }
 
     /// <summary>
-    /// Win32 メッセージフック
+    /// Win32 メッセージフック（DJ-9: クリック透過の唯一の制御手段）
     /// 非干渉モード時に WM_NCHITTEST で HTTRANSPARENT を返してクリック透過を実現する
+    /// OS はマウスメッセージ送信前に hit test を行い、HTTRANSPARENT なら背後ウィンドウに転送する
     /// </summary>
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
@@ -176,32 +178,13 @@ public partial class NoteWindow : Window
     }
 
     /// <summary>
-    /// クリック透過の ON/OFF を切り替える（三重制御）
+    /// クリック透過の ON/OFF を切り替える（DJ-9: WM_NCHITTEST 単独制御）
+    /// WS_EX_TRANSPARENT / WS_EX_NOACTIVATE は使用しない（VD追跡を破壊するため）
+    /// _isClickThrough フラグのみを切り替え、WndProc の WM_NCHITTEST 応答で制御する
     /// </summary>
     public void SetClickThrough(bool transparent)
     {
-        if (_hwnd == IntPtr.Zero)
-        {
-            Log.Warning("SetClickThrough: HWND が未初期化です: {NoteId}", Model.NoteId);
-            return;
-        }
-
         if (_isClickThrough == transparent) return;
-
-        var exStyle = NativeMethods.GetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE);
-
-        if (transparent)
-        {
-            exStyle |= NativeMethods.WS_EX_TRANSPARENT;
-            exStyle |= NativeMethods.WS_EX_NOACTIVATE;
-        }
-        else
-        {
-            exStyle &= ~NativeMethods.WS_EX_TRANSPARENT;
-            exStyle &= ~NativeMethods.WS_EX_NOACTIVATE;
-        }
-
-        NativeMethods.SetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE, exStyle);
         _isClickThrough = transparent;
 
         Log.Information("SetClickThrough: {NoteId} → {Mode}",

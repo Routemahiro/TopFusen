@@ -70,15 +70,24 @@
   - OS に「通常ウィンドウ」として認識させてから透過を掛ける
   - Phase 8 での MoveWindowToDesktop は Show() と SetClickThrough() の間で行う
 
-### DJ-6: クリック透過は三重制御方式（Phase 2 で判明）
-- WPF `AllowsTransparency=True` は `WS_EX_LAYERED` を自動付与する
-- `WS_EX_LAYERED` 環境では `WS_EX_TRANSPARENT` の ON/OFF だけではクリック制御が不十分
-- **三重制御方式を採用:**
-  1. `WS_EX_TRANSPARENT`: Win32 レベルのクリック透過
-  2. `WS_EX_NOACTIVATE`: フォーカスを奪わない
-  3. `WM_NCHITTEST` フック: `HTTRANSPARENT` を返してメッセージレベルで透過制御
-- 非干渉モード: 3つすべて ON → 確実にクリック透過
-- 編集モード: WS_EX_TRANSPARENT OFF + WS_EX_NOACTIVATE OFF + WM_NCHITTEST フックが素通し → クリック可能
+### DJ-6: クリック透過は三重制御方式（Phase 2 で判明）→ ~~DJ-9 で WM_NCHITTEST 単独に変更~~
+- ~~WPF `AllowsTransparency=True` は `WS_EX_LAYERED` を自動付与する~~
+- ~~`WS_EX_LAYERED` 環境では `WS_EX_TRANSPARENT` の ON/OFF だけではクリック制御が不十分~~
+- ~~三重制御方式を採用~~ → **DJ-9 で WM_NCHITTEST 単独制御に変更**
+
+### DJ-9: クリック透過は WM_NCHITTEST 単独制御に変更（Phase 5 後に判明）
+- **問題**: `WS_EX_TRANSPARENT` + `WS_EX_NOACTIVATE` を付けると（生成後であっても）OS の仮想デスクトップ追跡が破壊される
+  - 編集OFF（スタイル付与）→ 全デスクトップで付箋が表示される
+  - 編集ON（スタイル除去）→ 正常に1デスクトップに所属する
+  - 再び編集OFF → また全デスクトップに表示される
+- **DJ-8 のワークアラウンド（生成時クリーン → Show() 後適用）は不十分だった**
+  - 生成時だけでなく、後から付けても OS は VD 追跡を止める
+- **対策**: `WS_EX_TRANSPARENT` / `WS_EX_NOACTIVATE` を**一切使わない**
+  - クリック透過は `WM_NCHITTEST` → `HTTRANSPARENT` のみで実現
+  - `SetClickThrough()` は `_isClickThrough` フラグの切り替えのみ（Win32 スタイル操作なし）
+  - OS がマウスメッセージ送信前に hit test を行い、HTTRANSPARENT なら背後ウィンドウに転送
+  - ウィンドウスタイルを変更しないので VD 追跡が常に維持される
+- **OnSourceInitialized** では念のため `WS_EX_TRANSPARENT` / `WS_EX_NOACTIVATE` / `WS_EX_TOOLWINDOW` を除去
 
 ---
 
