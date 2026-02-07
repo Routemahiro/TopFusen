@@ -735,3 +735,27 @@ Phase 11: 設定画面（統合）
   - OpenSettingsWindow(): 二重起動防止（_settingsWindow フィールド + Closed イベント）
 
 Phase 11 実装完了（ビルド成功・Lint クリーン）。P11-VERIFY は手動検証待ち。
+
+=== Phase 13: VD 紐づけバグ修正（案B）===
+日付: 2026-02-07
+
+[調査結果] DesktopId 付与・更新フローを全て洗い出し、3件のバグを発見。
+
+[P13-1] BUG 1 修正: DuplicateNote() で DesktopId をコピーしていなかった
+  - 原因: DuplicateNote() で新規 NoteModel を作成する際、DesktopId のコピーが漏れていた
+  - 影響: 複製付箋の DesktopId が Guid.Empty → 全VDで表示 + Z順リストに未登録 + 設定画面に非表示
+  - 修正: model.DesktopId = source.Model.DesktopId; を追加
+  - ★ 報告された症状「設定画面に1枚しか表示されないのに画面に複数見える」と完全一致
+
+[P13-2] BUG 2 修正: HandleDesktopSwitch() のリアルタイム孤立判定を削除
+  - 原因: VD切替のたびに Registry を読んで孤立判定 → 一時的な不整合で誤判定リスク
+  - 影響: VD切替時に Registry が一瞬空 → 他VDの付箋が全て「孤立」扱いで現在VDに移動
+  - 修正: HandleDesktopSwitch() から FindOrphanedDesktopIds + 救済ループを削除
+  - 孤立救済は起動時の RescueOrphanedNotes() のみに限定（こちらは正常動作確認済み）
+
+[P13-3] BUG 3 修正: CreateNote() で DesktopId 取得のフォールバック強化
+  - 原因: GetCurrentDesktopIdFast() が null を返す可能性（COM障害/Registry障害）
+  - 影響: DesktopId が Guid.Empty のまま → BUG 1 と同じ症状
+  - 修正: null 時に GetCurrentDesktopId()（重量級・短命ウィンドウ方式）にフォールバック
+
+ビルド成功・Lint クリーン。P13-VERIFY は手動検証待ち。
