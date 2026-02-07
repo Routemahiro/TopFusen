@@ -7,17 +7,19 @@ using TopFusen.Views;
 namespace TopFusen.Services;
 
 /// <summary>
-/// 付箋のライフサイクル管理（生成 / 保持 / 破棄 / モード切替 / 選択管理 / 永続化連携）
+/// 付箋のライフサイクル管理（生成 / 保持 / 破棄 / モード切替 / 選択管理 / 永続化連携 / VD 表示制御）
 /// Phase 1: メモリ上のみ管理
 /// Phase 2: 編集モード管理 + クリック透過の一括制御
 /// Phase 3: 選択状態管理 + 複製 + イベント連携
 /// Phase 3.7: DJ-7 対応 — オーナーウィンドウ方式で Alt+Tab 非表示 + 仮想デスクトップ参加
 /// Phase 5: 永続化連携（PersistenceService との統合 — SaveAll / LoadAll / 変更追跡）
+/// Phase 8.0: DJ-10 — VD 自前管理（DWMWA_CLOAK + DesktopId 付与 + 切替時 Cloak/Uncloak）
 /// </summary>
 public class NoteManager
 {
     private readonly List<(NoteModel Model, NoteWindow Window)> _notes = new();
     private readonly PersistenceService _persistence;
+    private readonly VirtualDesktopService _vdService;
 
     /// <summary>アプリケーション設定（永続化される）</summary>
     private AppSettings _appSettings = new();
@@ -49,13 +51,19 @@ public class NoteManager
     /// <summary>アプリケーション設定への参照（読み取り用）</summary>
     public AppSettings AppSettings => _appSettings;
 
+    /// <summary>オーナーウィンドウの HWND（VD Tracker 等の外部利用向け）</summary>
+    public IntPtr OwnerHandle => _ownerWindow != null
+        ? new WindowInteropHelper(_ownerWindow).Handle
+        : IntPtr.Zero;
+
     // ==========================================
-    //  コンストラクタ（Phase 5: DI で PersistenceService を受け取る）
+    //  コンストラクタ（Phase 5: DI + Phase 8.0: VD サービス）
     // ==========================================
 
-    public NoteManager(PersistenceService persistence)
+    public NoteManager(PersistenceService persistence, VirtualDesktopService vdService)
     {
         _persistence = persistence;
+        _vdService = vdService;
         _persistence.SaveRequested += SaveAll;
     }
 
@@ -98,13 +106,35 @@ public class NoteManager
 
     /// <summary>
     /// 編集モードを切り替え、全付箋ウィンドウに一括反映する
-    /// 編集OFF時は選択状態もクリアする
+    /// DJ-10: 編集 OFF 時は「先に非現在VDの付箋を Cloak → WS_EX_TRANSPARENT 付与」の順序で
+    ///        編集 ON 時は「WS_EX_TRANSPARENT 除去 → 現在VDの付箋を Uncloak」の順序
+    ///        これにより「編集OFF直後に他VDで付箋が一瞬表示される」ちらつきを防ぐ
     /// </summary>
     public void SetEditMode(bool isEditMode)
     {
         IsEditMode = isEditMode;
         var clickThrough = !isEditMode;
 
+        if (clickThrough && _vdService.IsAvailable)
+        {
+            // DJ-10: 編集 OFF 遷移 — ① 非現在VDの付箋を先に Cloak
+            var currentDesktop = _vdService.GetCurrentDesktopIdFast();
+            if (currentDesktop.HasValue)
+            {
+                foreach (var (model, window) in _notes)
+                {
+                    var hwnd = new WindowInteropHelper(window).Handle;
+                    if (hwnd == IntPtr.Zero) continue;
+
+                    if (model.DesktopId != Guid.Empty && model.DesktopId != currentDesktop.Value)
+                    {
+                        VirtualDesktopService.CloakWindow(hwnd);
+                    }
+                }
+            }
+        }
+
+        // ② クリック透過 + 編集モード切替
         foreach (var (_, window) in _notes)
         {
             window.SetClickThrough(clickThrough);
@@ -115,6 +145,24 @@ public class NoteManager
         if (!isEditMode)
         {
             DeselectAll();
+        }
+        else if (_vdService.IsAvailable)
+        {
+            // DJ-10: 編集 ON 遷移 — WS_EX_TRANSPARENT 除去後に現在VDの付箋を Uncloak
+            var currentDesktop = _vdService.GetCurrentDesktopIdFast();
+            if (currentDesktop.HasValue)
+            {
+                foreach (var (model, window) in _notes)
+                {
+                    var hwnd = new WindowInteropHelper(window).Handle;
+                    if (hwnd == IntPtr.Zero) continue;
+
+                    if (model.DesktopId == Guid.Empty || model.DesktopId == currentDesktop.Value)
+                    {
+                        VirtualDesktopService.UncloakWindow(hwnd);
+                    }
+                }
+            }
         }
 
         Log.Information("編集モード一括切替: {Mode}（対象: {Count}枚）",
@@ -258,16 +306,40 @@ public class NoteManager
         // FR-BOOT-2: 起動直後は必ず編集OFF（非干渉モード）
         window.SetClickThrough(true);
 
+        // Phase 8.0: 復元時に DesktopId をチェックし、現在の VD に属さない付箋は Cloak
+        if (_vdService.IsAvailable && model.DesktopId != Guid.Empty)
+        {
+            var currentDesktop = _vdService.GetCurrentDesktopIdFast();
+            if (currentDesktop.HasValue && model.DesktopId != currentDesktop.Value)
+            {
+                var hwnd = new WindowInteropHelper(window).Handle;
+                VirtualDesktopService.CloakWindow(hwnd);
+                Log.Information("復元時 Cloak: {NoteId} (VD={DesktopId}, 現在={CurrentVD})",
+                    model.NoteId, model.DesktopId, currentDesktop);
+            }
+        }
+        // DesktopId が空の付箋（旧データ）は現在の VD に付替
+        if (model.DesktopId == Guid.Empty && _vdService.IsAvailable)
+        {
+            var currentDesktop = _vdService.GetCurrentDesktopIdFast();
+            if (currentDesktop.HasValue)
+            {
+                model.DesktopId = currentDesktop.Value;
+                Log.Information("旧データ VD 付替: {NoteId} → {DesktopId}", model.NoteId, model.DesktopId);
+            }
+        }
+
         // 変更追跡を有効化（これ以降の変更がデバウンス保存のトリガーになる）
         window.EnableChangeTracking();
 
         // FirstLinePreview を更新
         model.FirstLinePreview = window.GetFirstLinePreview();
 
-        Log.Information("付箋を復元: {NoteId} (位置: {X:F0}, {Y:F0}, サイズ: {W:F0}x{H:F0})",
+        Log.Information("付箋を復元: {NoteId} (位置: {X:F0}, {Y:F0}, サイズ: {W:F0}x{H:F0}, VD={DesktopId})",
             model.NoteId,
             model.Placement.DipX, model.Placement.DipY,
-            model.Placement.DipWidth, model.Placement.DipHeight);
+            model.Placement.DipWidth, model.Placement.DipHeight,
+            model.DesktopId);
 
         return window;
     }
@@ -292,6 +364,16 @@ public class NoteManager
 
         // 重なり検知 + ずらし（既存付箋と完全重複を避ける）
         ApplyOverlapOffset(model, workArea);
+
+        // Phase 8.0: 現在のデスクトップ ID を付与
+        if (_vdService.IsAvailable)
+        {
+            var desktopId = _vdService.GetCurrentDesktopIdFast();
+            if (desktopId.HasValue)
+            {
+                model.DesktopId = desktopId.Value;
+            }
+        }
 
         // DJ-7: ウィンドウは必ず「クリック透過なし」で生成する
         var window = new NoteWindow(model, clickThrough: false);
@@ -482,6 +564,43 @@ public class NoteManager
             _ownerWindow = null;
             Log.Information("オーナーウィンドウを閉じました");
         }
+    }
+
+    // ==========================================
+    //  Phase 8.0: VD 表示制御
+    // ==========================================
+
+    /// <summary>
+    /// デスクトップ切替時に付箋の表示/非表示を制御する（DJ-10）
+    /// 現在の VD に属する付箋を Uncloak、それ以外を Cloak
+    /// VD 未設定（DesktopId == Guid.Empty）の付箋は常に表示
+    /// </summary>
+    public void HandleDesktopSwitch(Guid currentDesktopId)
+    {
+        var cloakCount = 0;
+        var uncloakCount = 0;
+
+        foreach (var (model, window) in _notes)
+        {
+            var hwnd = new WindowInteropHelper(window).Handle;
+            if (hwnd == IntPtr.Zero) continue;
+
+            if (model.DesktopId == Guid.Empty || model.DesktopId == currentDesktopId)
+            {
+                // 現在の VD に属する（または VD 未設定）→ 表示
+                VirtualDesktopService.UncloakWindow(hwnd);
+                uncloakCount++;
+            }
+            else
+            {
+                // 他の VD に属する → 非表示
+                VirtualDesktopService.CloakWindow(hwnd);
+                cloakCount++;
+            }
+        }
+
+        Log.Information("デスクトップ切替処理: VD={DesktopId}, 表示={Uncloak}, 非表示={Cloak}",
+            currentDesktopId, uncloakCount, cloakCount);
     }
 
     // ==========================================

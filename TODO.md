@@ -89,6 +89,25 @@
   - ウィンドウスタイルを変更しないので VD 追跡が常に維持される
 - **OnSourceInitialized** では念のため `WS_EX_TRANSPARENT` / `WS_EX_NOACTIVATE` / `WS_EX_TOOLWINDOW` を除去
 
+### DJ-10: VD 自前管理方式の確定（案C — WS_EX_TRANSPARENT + DWMWA_CLOAK + ポーリング）
+- **前提**: `WS_EX_TRANSPARENT` と OS の仮想デスクトップ追跡は共存不可能（DJ-8/DJ-9 で検証済み）
+- **方針**: OS の VD 追跡に頼らず、アプリ側で自前管理する
+- **クリック透過**: `WS_EX_TRANSPARENT` + `WS_EX_NOACTIVATE` + `WM_NCHITTEST` の三重制御を復活（DJ-6 に戻す）
+  - ただし DJ-8 の「Show() 後に付与」は維持。DJ-9 は撤回
+- **VD 切替検知**:
+  1. レジストリ監視（`RegNotifyChangeKeyValue`）— 第一候補（Phase 8 本実装で導入予定）
+  2. `DispatcherTimer` ポーリング（300ms）— Phase 8.0 スパイク + フォールバック
+  - ※ 未公開 COM 通知は不採用（Windows Update で GUID 変更リスク大）
+- **表示制御**:
+  1. `DWMWA_CLOAK`（DWM Cloak）— 第一候補
+  2. `ShowWindow(SW_HIDE)` — フォールバック
+  - ※ `Opacity=0` は不採用（デバッグ困難＋副作用リスク）
+- **VD Tracker Window**: `WS_EX_TRANSPARENT` なしの常駐 HWND で `IsWindowOnCurrentVirtualDesktop` を高速チェック
+- **編集モード遷移シーケンス**（ちらつき対策の核心）:
+  - 編集 OFF: ① 現在 VD 以外の付箋を Cloak → ② `WS_EX_TRANSPARENT` 付与
+  - 編集 ON: ① `WS_EX_TRANSPARENT` 除去 → ② 該当 VD の付箋のみ Uncloak
+- **デスクトップ喪失フォールバック**: 保存 `DesktopId` が現存しない場合 → 現在 VD に付替
+
 ---
 
 ## 引き継ぎルール
@@ -406,6 +425,30 @@
 
 ---
 
+## Phase 8.0: VD 自前管理 技術スパイク 🔬
+> 目標: DJ-10 方式（WS_EX_TRANSPARENT + DWMWA_CLOAK + ポーリング）の技術検証
+> ※ Phase 8 本格実装の前に「動くか」を確認するスパイク
+> 背景: WS_EX_TRANSPARENT と OS の VD 追跡が共存不可能であることが判明（DJ-8/DJ-9）
+> 方針: OS の VD 追跡に頼らず、DWMWA_CLOAK で自前管理する
+
+- [ ] P8.0-1: NativeMethods 拡張（DwmSetWindowAttribute / DWMWA_CLOAK / SetWindowPos）
+- [ ] P8.0-2: VD Tracker Window 実装（WS_EX_TRANSPARENT なし常駐 HWND）
+- [ ] P8.0-3: DWMWA_CLOAK による Cloak/Uncloak 実装
+- [ ] P8.0-4: DispatcherTimer ポーリングによる VD 切替検知
+- [ ] P8.0-5: WS_EX_TRANSPARENT 復活（DJ-9 撤回 → DJ-6 三重制御に戻す）
+- [ ] P8.0-6: 基本的な VD 表示制御（デスクトップ切替時に Cloak/Uncloak）
+- [ ] P8.0-7: 付箋作成時に現在 DesktopId を付与 + 起動復元時の VD 振り分け
+- [ ] P8.0-8: トレイデバッグメニューに検証項目追加
+- [ ] **P8.0-VERIFY: スパイク検証**
+  - [ ] DWMWA_CLOAK で NoteWindow が隠れる / 再表示される
+  - [ ] VD Tracker Window で現在のデスクトップ ID が取得できる
+  - [ ] クリック透過が復活している（編集 OFF 時にクロスプロセスで透過）
+  - [ ] デスクトップ切替時に正しい付箋だけが表示される
+  - [ ] Uncloak 後に Topmost が維持されている
+  - [ ] 再起動後に DesktopId が復元され、正しい VD に付箋が表示される
+
+---
+
 ## Phase 6: 見た目・スタイル（FR-STYLE / FR-FONT）
 > 目標: 背景色パレット + 不透明度 + フォント選択が動く
 
@@ -465,9 +508,10 @@
 
 ---
 
-## Phase 8: 仮想デスクトップ対応（FR-VDSK）
+## Phase 8: 仮想デスクトップ対応（FR-VDSK）★ Phase 8.0 スパイク後に本格実装
 > 目標: デスクトップ単位で付箋が分離・復元される
-> ※ Phase 3.5 のスパイクで技術検証済み。ここでは本格実装を行う
+> ※ Phase 3.5 → Phase 8.0 で DJ-10 方式の検証済み → ここで本格実装
+> ★ Phase 6/7 より前倒しで実装する（クリック透過と VD 追跡の矛盾を早期解決）
 
 - [ ] P8-1: Phase 3.5 のスパイクコードを正式実装へ昇格
   - IVirtualDesktopManager ラッパー（Services/VirtualDesktopService.cs）
@@ -687,7 +731,8 @@
 | Phase 5 | 永続化 | ✅ 完了 (2026-02-07) |
 | Phase 6 | 見た目・スタイル | 未着手 |
 | Phase 7 | マルチモニタ | 未着手 |
-| Phase 8 | 仮想デスクトップ | 未着手 |
+| Phase 8.0 | VD 自前管理 技術スパイク | 🔧 作業中 |
+| Phase 8 | 仮想デスクトップ | ★ 前倒し（8.0 スパイク後） |
 | Phase 9 | Z順管理 | 未着手 |
 | Phase 10 | 非表示 + ホットキー + 自動起動 | 未着手 |
 | Phase 11 | 設定画面 | 未着手 |

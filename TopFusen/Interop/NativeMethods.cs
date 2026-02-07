@@ -6,6 +6,7 @@ namespace TopFusen.Interop;
 /// Win32 API の P/Invoke 定義
 /// Phase 1: WS_EX_TOOLWINDOW（Alt+Tab 非表示）
 /// Phase 2: WS_EX_TRANSPARENT, WS_EX_NOACTIVATE（クリック透過 + 非アクティブ化）
+/// Phase 8.0: DWM Cloak + SetWindowPos（VD 自前管理用）
 /// </summary>
 internal static class NativeMethods
 {
@@ -19,9 +20,41 @@ internal static class NativeMethods
     internal const int WS_EX_LAYERED     = 0x00080000;  // レイヤードウィンドウ（AllowsTransparency で WPF が自動付与）
     internal const int WS_EX_NOACTIVATE  = 0x08000000;  // フォーカスを奪わない
 
+    // ----- GetWindowLong / SetWindowLong -----
+
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
     internal static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
     internal static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    // ----- DWM Cloak（DJ-10: VD 自前管理 — ウィンドウの表示/非表示制御）-----
+
+    /// <summary>
+    /// DWM ウィンドウ属性を設定する
+    /// Phase 8.0: DWMWA_CLOAK で Cloak/Uncloak を制御
+    /// </summary>
+    [DllImport("dwmapi.dll")]
+    internal static extern int DwmSetWindowAttribute(
+        IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
+
+    /// <summary>DWMWA_CLOAK: ウィンドウを隠す（DWM 合成は継続）</summary>
+    internal const int DWMWA_CLOAK = 13;
+
+    // ----- SetWindowPos（Topmost 再主張用）-----
+
+    /// <summary>
+    /// ウィンドウの位置・サイズ・Z 順を設定する
+    /// Phase 8.0: Uncloak 後に Topmost を再主張するために使用
+    /// </summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetWindowPos(
+        IntPtr hWnd, IntPtr hWndInsertAfter,
+        int X, int Y, int cx, int cy, uint uFlags);
+
+    internal static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    internal const uint SWP_NOMOVE     = 0x0002;
+    internal const uint SWP_NOSIZE     = 0x0001;
+    internal const uint SWP_NOACTIVATE = 0x0010;
 }

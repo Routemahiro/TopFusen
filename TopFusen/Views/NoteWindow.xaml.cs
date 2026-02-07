@@ -20,7 +20,8 @@ namespace TopFusen.Views;
 /// - Borderless + TopMost + AllowsTransparency
 /// - Alt+Tab 非表示: オーナーウィンドウ方式（DJ-7）+ ShowInTaskbar=False
 ///   ※ WS_EX_TOOLWINDOW は仮想デスクトップ管理から除外されるため使用しない
-/// - クリック透過: WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WM_NCHITTEST フック の三重制御
+/// - クリック透過: WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WM_NCHITTEST フック の三重制御（DJ-10 で復活）
+/// - VD 自前管理: DJ-10 — OS の VD 追跡に頼らず DWMWA_CLOAK で表示制御
 /// - Phase 3: WindowChrome でリサイズ + DragMove + 選択状態管理
 /// </summary>
 public partial class NoteWindow : Window
@@ -130,8 +131,9 @@ public partial class NoteWindow : Window
     /// <summary>
     /// HWND 生成後にメッセージフックを適用
     /// DJ-7: WS_EX_TOOLWINDOW は除去（オーナーウィンドウ方式で Alt+Tab 非表示を実現）
-    /// DJ-9: WS_EX_TRANSPARENT / WS_EX_NOACTIVATE は使用しない（VD追跡を破壊するため）
-    ///       クリック透過は WM_NCHITTEST → HTTRANSPARENT のみで実現する
+    /// DJ-10: 生成時は WS_EX_TRANSPARENT / WS_EX_NOACTIVATE を付けない（DJ-8 維持）
+    ///        Show() 後に NoteManager が SetClickThrough() で適用する
+    ///        VD 自前管理のため WM_NCHITTEST フックも三重制御の一部として維持
     /// </summary>
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
@@ -141,30 +143,28 @@ public partial class NoteWindow : Window
         var exStyle = NativeMethods.GetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE);
 
         // DJ-7: WS_EX_TOOLWINDOW は使わない（仮想デスクトップ管理から除外されるため）
-        // Alt+Tab 非表示は Owner ウィンドウ + ShowInTaskbar=false で実現
-        // 念のため TOOLWINDOW が付いていたら外す
         exStyle &= ~NativeMethods.WS_EX_TOOLWINDOW;
 
-        // DJ-9: WS_EX_TRANSPARENT / WS_EX_NOACTIVATE も使わない
-        // これらのスタイルは OS の仮想デスクトップ追跡を破壊する（生成後に付けても同様）
-        // クリック透過は WM_NCHITTEST フックのみで実現する
+        // DJ-10: 生成時は WS_EX_TRANSPARENT / WS_EX_NOACTIVATE を付けない（DJ-8 維持）
+        // これらは Show() 後に SetClickThrough() で適用される
+        // 生成時にクリーンな状態にすることで、OS に通常ウィンドウとして認識させる
         exStyle &= ~NativeMethods.WS_EX_TRANSPARENT;
         exStyle &= ~NativeMethods.WS_EX_NOACTIVATE;
 
         NativeMethods.SetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE, exStyle);
-        _isClickThrough = _initialClickThrough;
+        _isClickThrough = false; // 生成時は常にクリック透過なし
 
-        // WM_NCHITTEST メッセージフックを登録（DJ-9: クリック透過の唯一の制御手段）
+        // WM_NCHITTEST メッセージフックを登録（三重制御の一部 — DJ-10 でも維持）
         _hwndSource?.AddHook(WndProc);
 
-        Log.Information("NoteWindow 初期化: {NoteId} (ClickThrough={ClickThrough}, ExStyle=0x{ExStyle:X8}, HasOwner={HasOwner})",
-            Model.NoteId, _isClickThrough, exStyle, Owner != null);
+        Log.Information("NoteWindow 初期化: {NoteId} (ExStyle=0x{ExStyle:X8}, HasOwner={HasOwner})",
+            Model.NoteId, exStyle, Owner != null);
     }
 
     /// <summary>
-    /// Win32 メッセージフック（DJ-9: クリック透過の唯一の制御手段）
-    /// 非干渉モード時に WM_NCHITTEST で HTTRANSPARENT を返してクリック透過を実現する
-    /// OS はマウスメッセージ送信前に hit test を行い、HTTRANSPARENT なら背後ウィンドウに転送する
+    /// Win32 メッセージフック（三重制御の一部 — DJ-10 でも維持）
+    /// 非干渉モード時に WM_NCHITTEST で HTTRANSPARENT を返す
+    /// WS_EX_TRANSPARENT（クロスプロセス透過）と併用して確実性を高める
     /// </summary>
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
@@ -178,17 +178,36 @@ public partial class NoteWindow : Window
     }
 
     /// <summary>
-    /// クリック透過の ON/OFF を切り替える（DJ-9: WM_NCHITTEST 単独制御）
-    /// WS_EX_TRANSPARENT / WS_EX_NOACTIVATE は使用しない（VD追跡を破壊するため）
-    /// _isClickThrough フラグのみを切り替え、WndProc の WM_NCHITTEST 応答で制御する
+    /// クリック透過の ON/OFF を切り替える（DJ-10: 三重制御を復活）
+    /// WS_EX_TRANSPARENT + WS_EX_NOACTIVATE の Win32 スタイル操作 + WM_NCHITTEST フック
+    /// ★ VD 追跡は DWMWA_CLOAK による自前管理で対処（DJ-10）
     /// </summary>
     public void SetClickThrough(bool transparent)
     {
         if (_isClickThrough == transparent) return;
         _isClickThrough = transparent;
 
-        Log.Information("SetClickThrough: {NoteId} → {Mode}",
-            Model.NoteId, transparent ? "非干渉" : "編集");
+        if (_hwnd == IntPtr.Zero) return;
+
+        // DJ-10: Win32 スタイルを操作して WS_EX_TRANSPARENT / WS_EX_NOACTIVATE を切り替え
+        // OS の VD 追跡は壊れるが、DWMWA_CLOAK で自前管理するので OK
+        var exStyle = NativeMethods.GetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE);
+
+        if (transparent)
+        {
+            exStyle |= NativeMethods.WS_EX_TRANSPARENT;
+            exStyle |= NativeMethods.WS_EX_NOACTIVATE;
+        }
+        else
+        {
+            exStyle &= ~NativeMethods.WS_EX_TRANSPARENT;
+            exStyle &= ~NativeMethods.WS_EX_NOACTIVATE;
+        }
+
+        NativeMethods.SetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE, exStyle);
+
+        Log.Information("SetClickThrough: {NoteId} → {Mode} (ExStyle=0x{ExStyle:X8})",
+            Model.NoteId, transparent ? "非干渉" : "編集", exStyle);
     }
 
     // ==========================================
