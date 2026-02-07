@@ -717,6 +717,30 @@
 
 ---
 
+## Phase 13: VD 紐づけバグ修正（★最優先 — 案B）
+> 目標: 仮想デスクトップと付箋の紐づけが外れるバグを修正する
+> 背景: SESSION_HANDOVER_20260207_PART10 で報告されたバグ（後回し.md §3）
+> 方針: 案B（バランス）— BUG 1/2/3 を一括修正
+
+- [ ] P13-1: BUG 1 修正 — DuplicateNote() で DesktopId をコピー (作業中)
+  - `model.DesktopId = source.Model.DesktopId;` を追加
+  - `AddToZOrder()` に正しい DesktopId で登録されることを確認
+- [ ] P13-2: BUG 2 修正 — HandleDesktopSwitch() からリアルタイム孤立判定を削除
+  - `FindOrphanedDesktopIds` 呼び出し + 救済ループ を削除
+  - 起動時の `RescueOrphanedNotes()` のみに限定（こちらは正常動作確認済み）
+  - 根拠: 後回し.md §1 にも「リアルタイム救済は動作しない」と記載済み
+- [ ] P13-3: BUG 3 修正 — CreateNote() で DesktopId 取得のフォールバック強化
+  - `GetCurrentDesktopIdFast()` が null → 重量級 `GetCurrentDesktopId()` にフォールバック
+  - それでも null → ログ Warning 出力（Guid.Empty のまま = 全VD表示の安全側）
+- [ ] **P13-VERIFY: VD バグ修正検証**
+  - [ ] 付箋を複製 → 複製元と同じデスクトップに所属する
+  - [ ] 複製した付箋が設定画面の付箋管理タブに表示される
+  - [ ] VD 切替を繰り返しても他デスクトップの付箋が勝手に移動しない
+  - [ ] 新規作成した付箋が正しいデスクトップに紐づく
+  - [ ] 再起動後も紐づけが維持される
+
+---
+
 ## Phase 12: 統合テスト + 回帰テスト + ポリッシュ
 > 目標: 全Phase横断で結合動作を検証し、品質を仕上げる
 > ※ 各Phase個別の検証は完了済み。ここでは **Phase間の結合** と **エッジケース** を検証する
