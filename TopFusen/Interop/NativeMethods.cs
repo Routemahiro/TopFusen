@@ -6,7 +6,7 @@ namespace TopFusen.Interop;
 /// Win32 API の P/Invoke 定義
 /// Phase 1: WS_EX_TOOLWINDOW（Alt+Tab 非表示）
 /// Phase 2: WS_EX_TRANSPARENT, WS_EX_NOACTIVATE（クリック透過 + 非アクティブ化）
-/// Phase 8.0: DWM Cloak + SetWindowPos（VD 自前管理用）
+/// Phase 8: DWM Cloak + SetWindowPos（VD 自前管理用）
 /// </summary>
 internal static class NativeMethods
 {
@@ -32,7 +32,7 @@ internal static class NativeMethods
 
     /// <summary>
     /// DWM ウィンドウ属性を設定する
-    /// Phase 8.0: DWMWA_CLOAK で Cloak/Uncloak を制御
+    /// DJ-10: DWMWA_CLOAK で Cloak/Uncloak を制御
     /// </summary>
     [DllImport("dwmapi.dll")]
     internal static extern int DwmSetWindowAttribute(
@@ -45,7 +45,7 @@ internal static class NativeMethods
 
     /// <summary>
     /// ウィンドウの位置・サイズ・Z 順を設定する
-    /// Phase 8.0: Uncloak 後に Topmost を再主張するために使用
+    /// DJ-10: Uncloak 後に Topmost を再主張するために使用
     /// </summary>
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

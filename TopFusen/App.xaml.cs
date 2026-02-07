@@ -78,13 +78,13 @@ public partial class App : Application
         _noteManager = _serviceProvider.GetRequiredService<NoteManager>();
         _noteManager.InitializeOwnerWindow();
 
-        // 8. 仮想デスクトップサービス初期化（DJ-4: UIスレッドで / ★ LoadAll より前に）
+        // 8. 仮想デスクトップサービス初期化（DJ-4: UIスレッドで / LoadAll より前に初期化必須）
         _vdService = _serviceProvider.GetRequiredService<VirtualDesktopService>();
         _vdService.Initialize();
         _vdService.InitializeTracker(_noteManager.OwnerHandle);
 
-        // 9. Phase 5: 保存データから付箋を復元（起動直後は編集OFF — FR-BOOT-2）
-        //    ★ VD サービス初期化後に呼ぶこと — RestoreNote 内で VD Cloak が必要
+        // 9. 保存データから付箋を復元（起動直後は編集OFF — FR-BOOT-2）
+        //    VD サービス初期化後に呼ぶこと（RestoreNote 内で VD Cloak + P8-6 フォールバックが必要）
         _noteManager.LoadAll();
 
         // 10. Phase 5: 破損からの復旧通知
@@ -102,14 +102,14 @@ public partial class App : Application
                 }));
         }
 
-        // 11. Phase 8.0: デスクトップ監視開始（LoadAll 後に開始）
+        // 11. Phase 8: デスクトップ監視開始（LoadAll 後に開始）
         _vdService.DesktopChanged += OnDesktopChanged;
         _vdService.StartDesktopMonitoring();
 
         // 11. タスクトレイアイコン初期化
         InitializeTrayIcon();
 
-        Log.Information("アプリケーション起動完了（Phase 8.0: トレイ常駐 + モード切替 + 永続化 + VD自前管理）");
+        Log.Information("アプリケーション起動完了（Phase 8: トレイ常駐 + モード切替 + 永続化 + VD自前管理）");
     }
 
     /// <summary>
@@ -185,16 +185,16 @@ public partial class App : Application
 
         menu.Items.Add(new Separator());
 
-        // --- Phase 8.0: VD 自前管理 スパイク検証メニュー ---
-        var vdInfoItem = new MenuItem { Header = "🔬 VD: 情報取得テスト" };
+        // --- Phase 8: VD デバッグメニュー ---
+        var vdInfoItem = new MenuItem { Header = "🔬 VD: 情報取得" };
         vdInfoItem.Click += OnVdSpikeInfoTest;
         menu.Items.Add(vdInfoItem);
 
-        var vdCloakItem = new MenuItem { Header = "🔬 VD: Cloak/Uncloak テスト" };
+        var vdCloakItem = new MenuItem { Header = "🔬 VD: Cloak/Uncloak 確認" };
         vdCloakItem.Click += OnVdCloakTest;
         menu.Items.Add(vdCloakItem);
 
-        var vdStatusItem = new MenuItem { Header = "🔬 VD: 全付箋VD状態表示" };
+        var vdStatusItem = new MenuItem { Header = "🔬 VD: 全付箋状態" };
         vdStatusItem.Click += OnVdStatusTest;
         menu.Items.Add(vdStatusItem);
 
@@ -213,12 +213,11 @@ public partial class App : Application
     }
 
     // ==========================================
-    //  Phase 3.5: 仮想デスクトップ スパイク検証
+    //  Phase 8: VD デバッグ機能
     // ==========================================
 
     /// <summary>
-    /// VD スパイク: COM初期化 + 現在デスクトップID + Registry一覧 を一括テスト
-    /// 結果をメッセージボックスで表示
+    /// VD 情報取得: COM状態 + 現在デスクトップID + Registry一覧 を表示
     /// ★ async + Delay で ContextMenu が完全に閉じてから MessageBox を表示する
     ///   （H.NotifyIcon のトレイメニューから直接 MessageBox を出すと一瞬で消える問題の回避）
     /// </summary>
@@ -273,7 +272,7 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Phase 8.0: DWMWA_CLOAK テスト — 最初の付箋を Cloak → 3秒後に Uncloak
+    /// VD Cloak 確認 — 最初の付箋を Cloak → OK 後に Uncloak して動作を確認
     /// </summary>
     private async void OnVdCloakTest(object sender, RoutedEventArgs e)
     {
@@ -311,7 +310,7 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Phase 8.0: 全付箋の VD 状態を表示する
+    /// 全付箋の VD 状態を一覧表示する（DesktopId / WS_EX_TRANSPARENT / 所属判定）
     /// </summary>
     private async void OnVdStatusTest(object sender, RoutedEventArgs e)
     {
@@ -364,7 +363,7 @@ public partial class App : Application
     }
 
     // ==========================================
-    //  Phase 8.0: VD 切替ハンドラ
+    //  Phase 8: VD 切替ハンドラ
     // ==========================================
 
     /// <summary>

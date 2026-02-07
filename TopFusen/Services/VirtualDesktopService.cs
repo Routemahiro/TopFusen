@@ -13,8 +13,7 @@ namespace TopFusen.Services;
 /// 仮想デスクトップ操作サービス
 ///
 /// Phase 3.5: 技術スパイク（API 成立検証）
-/// Phase 8.0: DJ-10 スパイク（Tracker Window + DWMWA_CLOAK + ポーリング）
-/// Phase 8: 本格実装に昇格予定
+/// Phase 8: DJ-10 本実装（Tracker Window + DWMWA_CLOAK + ポーリング + 喪失フォールバック）
 ///
 /// DJ-4: COM 呼び出しは UI スレッド（STA）から行う
 /// DJ-10: VD 自前管理（WS_EX_TRANSPARENT と OS VD 追跡は共存不可）
@@ -32,7 +31,7 @@ public class VirtualDesktopService : IDisposable
     private const string VD_DESKTOPS_PATH
         = VD_REG_PATH + @"\Desktops";
 
-    // --- Phase 8.0: VD Tracker + 監視 ---
+    // --- Phase 8: VD Tracker + 監視 ---
 
     /// <summary>VD Tracker Window（WS_EX_TRANSPARENT なし、VD 追跡用の常駐 HWND）</summary>
     private Window? _trackerWindow;
@@ -397,7 +396,7 @@ public class VirtualDesktopService : IDisposable
     }
 
     // ==========================================
-    //  VD Tracker Window
+    //  Phase 8: VD Tracker Window
     // ==========================================
 
     /// <summary>
@@ -526,7 +525,7 @@ public class VirtualDesktopService : IDisposable
     }
 
     // ==========================================
-    //  P8.0-3: DWM Cloak / Uncloak
+    //  Phase 8: DWM Cloak / Uncloak
     // ==========================================
 
     /// <summary>
@@ -564,14 +563,15 @@ public class VirtualDesktopService : IDisposable
     }
 
     // ==========================================
-    //  P8.0-4: デスクトップ監視（DispatcherTimer ポーリング）
+    //  Phase 8: デスクトップ監視（DispatcherTimer ポーリング）
     // ==========================================
 
     /// <summary>
     /// VD 切替検知のポーリングを開始する
     /// 一定間隔で現在のデスクトップ ID をチェックし、変化があれば DesktopChanged イベントを発火
+    /// ★ 500ms は Win+Ctrl+矢印の体感遅延を抑えつつ CPU 負荷を最小化するバランス値
     /// </summary>
-    public void StartDesktopMonitoring(int intervalMs = 300)
+    public void StartDesktopMonitoring(int intervalMs = 500)
     {
         if (_pollTimer != null) return;
         if (!IsAvailable) return;

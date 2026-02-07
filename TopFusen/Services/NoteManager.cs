@@ -13,7 +13,7 @@ namespace TopFusen.Services;
 /// Phase 3: 選択状態管理 + 複製 + イベント連携
 /// Phase 3.7: DJ-7 対応 — オーナーウィンドウ方式で Alt+Tab 非表示 + 仮想デスクトップ参加
 /// Phase 5: 永続化連携（PersistenceService との統合 — SaveAll / LoadAll / 変更追跡）
-/// Phase 8.0: DJ-10 — VD 自前管理（DWMWA_CLOAK + DesktopId 付与 + 切替時 Cloak/Uncloak）
+/// Phase 8: DJ-10 — VD 自前管理（DWMWA_CLOAK + DesktopId 付与 + 切替時 Cloak/Uncloak + 喪失フォールバック）
 /// </summary>
 public class NoteManager
 {
@@ -57,7 +57,7 @@ public class NoteManager
         : IntPtr.Zero;
 
     // ==========================================
-    //  コンストラクタ（Phase 5: DI + Phase 8.0: VD サービス）
+    //  コンストラクタ（Phase 5: DI + Phase 8: VD サービス）
     // ==========================================
 
     public NoteManager(PersistenceService persistence, VirtualDesktopService vdService)
@@ -316,7 +316,7 @@ public class NoteManager
         // FR-BOOT-2: 起動直後は必ず編集OFF（非干渉モード）
         window.SetClickThrough(true);
 
-        // Phase 8.0: 復元時に DesktopId をチェックし、現在の VD に属さない付箋は Cloak
+        // Phase 8: 復元時に DesktopId をチェックし、現在の VD に属さない付箋は Cloak
         if (_vdService.IsAvailable && model.DesktopId != Guid.Empty)
         {
             var currentDesktop = _vdService.GetCurrentDesktopIdFast();
@@ -375,7 +375,7 @@ public class NoteManager
         // 重なり検知 + ずらし（既存付箋と完全重複を避ける）
         ApplyOverlapOffset(model, workArea);
 
-        // Phase 8.0: 現在のデスクトップ ID を付与
+        // Phase 8: 現在のデスクトップ ID を付与
         if (_vdService.IsAvailable)
         {
             var desktopId = _vdService.GetCurrentDesktopIdFast();
@@ -577,7 +577,7 @@ public class NoteManager
     }
 
     // ==========================================
-    //  Phase 8.0: VD 表示制御
+    //  Phase 8: VD 表示制御
     // ==========================================
 
     /// <summary>
