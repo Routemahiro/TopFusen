@@ -323,6 +323,9 @@ public partial class NoteWindow : Window
 
         // RichTextBox の選択変更でツールバー状態を更新
         NoteRichTextBox.SelectionChanged += NoteRichTextBox_SelectionChanged;
+
+        // Phase 4 P4-6: 貼り付け時のフォント正規化
+        DataObject.AddPastingHandler(NoteRichTextBox, OnPasting);
     }
 
     /// <summary>
@@ -490,5 +493,37 @@ public partial class NoteWindow : Window
             TextColorPopup.IsOpen = false;
             NoteRichTextBox.Focus();
         }
+    }
+
+    // --- P4-6: クリップボード + フォント正規化 ---
+
+    /// <summary>
+    /// 貼り付け時のフォント正規化（FR-TEXT-6 / FR-FONT）
+    /// WPF RichTextBox はリッチテキストを優先して貼り付け、無理ならプレーンにフォールバックする（標準動作）。
+    /// 貼り付け後、ドキュメント全体のフォントを付箋フォントに正規化する。
+    /// PRD: 「フォントは付箋単位」「貼り付けで異なるフォントが入ってきた場合は付箋フォントに正規化」
+    /// </summary>
+    private void OnPasting(object sender, DataObjectPastingEventArgs e)
+    {
+        // Dispatcher.BeginInvoke で貼り付け処理完了後にフォント正規化を実行する
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Background,
+            new Action(NormalizePastedFont));
+    }
+
+    /// <summary>
+    /// 貼り付け後にドキュメント全体のフォントファミリーを付箋フォントに正規化する
+    /// </summary>
+    private void NormalizePastedFont()
+    {
+        var doc = NoteRichTextBox.Document;
+        if (doc == null) return;
+
+        var noteFont = new FontFamily(Model.Style.FontFamilyName);
+        var fullRange = new TextRange(doc.ContentStart, doc.ContentEnd);
+        fullRange.ApplyPropertyValue(TextElement.FontFamilyProperty, noteFont);
+
+        Log.Debug("貼り付け後のフォント正規化: {NoteId} → {Font}",
+            Model.NoteId, Model.Style.FontFamilyName);
     }
 }

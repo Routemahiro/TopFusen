@@ -105,7 +105,8 @@
                                   FontSize="11"
                                   VerticalContentAlignment="Center"
                                   SelectionChanged="FontSizeCombo_SelectionChanged"
-                                  DropDownClosed="FontSizeCombo_DropDownClosed"/>
+                                  DropDownClosed="FontSizeCombo_DropDownClosed"
+                                  ToolTip="文字サイズ"/>
                         <!-- 区切り線 -->
                         <Rectangle Width="1" Height="16" Fill="#33333333" Margin="3,0"/>
                         <!-- 文字色 -->
