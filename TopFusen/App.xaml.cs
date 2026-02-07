@@ -237,7 +237,7 @@ public partial class App : Application
         var hotkeyEnabled = _noteManager?.AppSettings.Hotkey.Enabled ?? true;
         _hotkeyMenuItem = new MenuItem
         {
-            Header = hotkeyEnabled ? "⌨ ホットキー: ON (Ctrl+Win+E)" : "⌨ ホットキー: OFF"
+            Header = hotkeyEnabled ? "⌨ ホットキー: ON (Ctrl+Shift+Alt+E)" : "⌨ ホットキー: OFF"
         };
         _hotkeyMenuItem.Click += (_, _) =>
         {
@@ -246,7 +246,7 @@ public partial class App : Application
             _noteManager.AppSettings.Hotkey.Enabled = newEnabled;
             _hotkeyService.UpdateSettings(_noteManager.AppSettings.Hotkey);
             _hotkeyMenuItem.Header = newEnabled
-                ? "⌨ ホットキー: ON (Ctrl+Win+E)" : "⌨ ホットキー: OFF";
+                ? "⌨ ホットキー: ON (Ctrl+Shift+Alt+E)" : "⌨ ホットキー: OFF";
             _persistence?.ScheduleSave();
 
             if (newEnabled && _hotkeyService.LastError != null)

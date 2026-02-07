@@ -335,11 +335,12 @@ public class NoteManager
         // 1. settings.json 読み込み
         _appSettings = _persistence.LoadSettings() ?? new AppSettings();
 
-        // Phase 10 修正: Modifiers のデフォルト誤り (0x0003 = Ctrl+Alt) を正しい値 (0x000A = Ctrl+Win) にマイグレーション
-        if (_appSettings.Hotkey.Modifiers == 0x0003)
+        // Phase 10 修正: 旧デフォルト値を新デフォルト (Ctrl+Shift+Alt+E) にマイグレーション
+        if (_appSettings.Hotkey.Modifiers == 0x0003 || _appSettings.Hotkey.Modifiers == 0x000A)
         {
-            _appSettings.Hotkey.Modifiers = 0x000A; // MOD_CONTROL | MOD_WIN
-            Log.Information("ホットキー修飾キーを修正: 0x0003 (Ctrl+Alt) → 0x000A (Ctrl+Win)");
+            var old = _appSettings.Hotkey.Modifiers;
+            _appSettings.Hotkey.Modifiers = 0x0007; // MOD_ALT | MOD_CONTROL | MOD_SHIFT
+            Log.Information("ホットキー修飾キーを修正: 0x{Old:X4} → 0x0007 (Ctrl+Shift+Alt)", old);
         }
 
         Log.Information("設定読み込み完了（IsHidden={IsHidden}）", _appSettings.IsHidden);
