@@ -41,7 +41,7 @@ public class HotkeySettings
     public bool Enabled { get; set; } = true;
 
     /// <summary>修飾キー（Win32 MOD_* フラグの組み合わせ）</summary>
-    public int Modifiers { get; set; } = 0x0003; // MOD_CONTROL | MOD_WIN
+    public int Modifiers { get; set; } = 0x000A; // MOD_CONTROL(0x0002) | MOD_WIN(0x0008)
 
     /// <summary>仮想キーコード</summary>
     public int Key { get; set; } = 0x45; // 'E'
