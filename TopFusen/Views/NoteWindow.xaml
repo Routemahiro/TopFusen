@@ -33,25 +33,99 @@
                 <RowDefinition Height="Auto"/>  <!-- 下部アイコン列 -->
             </Grid.RowDefinitions>
 
-            <!-- === P3-2: ツールバー（編集ON + 選択中のみ表示 / ドラッグハンドル） === -->
+            <!-- === Phase 4: ツールバー（編集ON + 選択中のみ表示 / ドラッグ + 装飾） === -->
             <Border x:Name="ToolbarArea"
                     Grid.Row="0"
                     Background="#18000000"
-                    Padding="6,3"
+                    Padding="4,2"
                     CornerRadius="2,2,0,0"
                     Cursor="SizeAll"
                     Visibility="Collapsed"
                     MouseLeftButtonDown="ToolbarArea_MouseLeftButtonDown">
-                <Grid>
-                    <!-- ドラッグハンドル（左寄せ） -->
-                    <TextBlock Text="⠿"
+                <DockPanel>
+                    <!-- ドラッグハンドル（左端） -->
+                    <TextBlock DockPanel.Dock="Left"
+                               Text="⠿"
                                FontSize="14"
                                Foreground="#66333333"
-                               HorizontalAlignment="Left"
                                VerticalAlignment="Center"
+                               Margin="0,0,4,0"
                                IsHitTestVisible="False"/>
-                    <!-- Phase 4: ここにリッチテキスト装飾ツールバーを追加予定 -->
-                </Grid>
+
+                    <!-- Phase 4: 装飾ツールバー -->
+                    <StackPanel Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <!-- 太字 B -->
+                        <Button x:Name="BoldButton"
+                                Width="22" Height="22" Margin="1,0"
+                                Focusable="False" Cursor="Hand"
+                                Background="Transparent"
+                                BorderBrush="#44333333" BorderThickness="1"
+                                Click="BoldButton_Click"
+                                ToolTip="太字 (Ctrl+B)">
+                            <TextBlock Text="B" FontWeight="Bold" FontSize="12"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                        <!-- 下線 U -->
+                        <Button x:Name="UnderlineButton"
+                                Width="22" Height="22" Margin="1,0"
+                                Focusable="False" Cursor="Hand"
+                                Background="Transparent"
+                                BorderBrush="#44333333" BorderThickness="1"
+                                Click="UnderlineButton_Click"
+                                ToolTip="下線 (Ctrl+U)">
+                            <TextBlock Text="U" FontSize="12"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock.TextDecorations>
+                                    <TextDecoration Location="Underline"/>
+                                </TextBlock.TextDecorations>
+                            </TextBlock>
+                        </Button>
+                        <!-- 取り消し線 S -->
+                        <Button x:Name="StrikethroughButton"
+                                Width="22" Height="22" Margin="1,0"
+                                Focusable="False" Cursor="Hand"
+                                Background="Transparent"
+                                BorderBrush="#44333333" BorderThickness="1"
+                                Click="StrikethroughButton_Click"
+                                ToolTip="取り消し線">
+                            <TextBlock Text="S" FontSize="12"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock.TextDecorations>
+                                    <TextDecoration Location="Strikethrough"/>
+                                </TextBlock.TextDecorations>
+                            </TextBlock>
+                        </Button>
+                        <!-- 区切り線 -->
+                        <Rectangle Width="1" Height="16" Fill="#33333333" Margin="3,0"/>
+                        <!-- 文字サイズ -->
+                        <ComboBox x:Name="FontSizeCombo"
+                                  Width="48" Height="22" Margin="1,0"
+                                  IsEditable="False"
+                                  FontSize="11"
+                                  VerticalContentAlignment="Center"
+                                  SelectionChanged="FontSizeCombo_SelectionChanged"
+                                  DropDownClosed="FontSizeCombo_DropDownClosed"/>
+                        <!-- 区切り線 -->
+                        <Rectangle Width="1" Height="16" Fill="#33333333" Margin="3,0"/>
+                        <!-- 文字色 -->
+                        <Button x:Name="TextColorButton"
+                                Width="22" Height="22" Margin="1,0"
+                                Focusable="False" Cursor="Hand"
+                                Background="Transparent"
+                                BorderBrush="#44333333" BorderThickness="1"
+                                Click="TextColorButton_Click"
+                                ToolTip="文字色">
+                            <StackPanel>
+                                <TextBlock Text="A" FontWeight="Bold" FontSize="11"
+                                           HorizontalAlignment="Center"/>
+                                <Rectangle x:Name="TextColorIndicator"
+                                           Height="3" Fill="#FF333333"
+                                           Margin="2,-2,2,0"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </DockPanel>
             </Border>
 
             <!-- === 本文領域（Phase 4: RichTextBox） === -->
@@ -108,6 +182,62 @@
                     </Button>
                 </StackPanel>
             </Border>
+
+            <!-- Phase 4: 文字色パレット Popup -->
+            <Popup x:Name="TextColorPopup"
+                   PlacementTarget="{Binding ElementName=TextColorButton}"
+                   Placement="Bottom"
+                   StaysOpen="False"
+                   AllowsTransparency="True">
+                <Border Background="#FFFAFAFA" BorderBrush="#CCCCCC" BorderThickness="1"
+                        CornerRadius="4" Padding="4">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="6" ShadowDepth="2" Opacity="0.2"/>
+                    </Border.Effect>
+                    <UniformGrid Columns="5" Rows="2">
+                        <Button Width="22" Height="22" Margin="1" Background="#333333"
+                                Click="TextColorSwatch_Click" Tag="#FF333333"
+                                BorderBrush="#AAAAAA" BorderThickness="1" Cursor="Hand" Focusable="False"
+                                ToolTip="黒"/>
+                        <Button Width="22" Height="22" Margin="1" Background="#FFFFFF"
+                                Click="TextColorSwatch_Click" Tag="#FFFFFFFF"
+                                BorderBrush="#AAAAAA" BorderThickness="1" Cursor="Hand" Focusable="False"
+                                ToolTip="白"/>
+                        <Button Width="22" Height="22" Margin="1" Background="#E53935"
+                                Click="TextColorSwatch_Click" Tag="#FFE53935"
+                                BorderBrush="#AAAAAA" BorderThickness="1" Cursor="Hand" Focusable="False"
+                                ToolTip="赤"/>
+                        <Button Width="22" Height="22" Margin="1" Background="#1E88E5"
+                                Click="TextColorSwatch_Click" Tag="#FF1E88E5"
+                                BorderBrush="#AAAAAA" BorderThickness="1" Cursor="Hand" Focusable="False"
+                                ToolTip="青"/>
+                        <Button Width="22" Height="22" Margin="1" Background="#43A047"
+                                Click="TextColorSwatch_Click" Tag="#FF43A047"
+                                BorderBrush="#AAAAAA" BorderThickness="1" Cursor="Hand" Focusable="False"
+                                ToolTip="緑"/>
+                        <Button Width="22" Height="22" Margin="1" Background="#FB8C00"
+                                Click="TextColorSwatch_Click" Tag="#FFFB8C00"
+                                BorderBrush="#AAAAAA" BorderThickness="1" Cursor="Hand" Focusable="False"
+                                ToolTip="オレンジ"/>
+                        <Button Width="22" Height="22" Margin="1" Background="#8E24AA"
+                                Click="TextColorSwatch_Click" Tag="#FF8E24AA"
+                                BorderBrush="#AAAAAA" BorderThickness="1" Cursor="Hand" Focusable="False"
+                                ToolTip="紫"/>
+                        <Button Width="22" Height="22" Margin="1" Background="#EC407A"
+                                Click="TextColorSwatch_Click" Tag="#FFEC407A"
+                                BorderBrush="#AAAAAA" BorderThickness="1" Cursor="Hand" Focusable="False"
+                                ToolTip="ピンク"/>
+                        <Button Width="22" Height="22" Margin="1" Background="#00ACC1"
+                                Click="TextColorSwatch_Click" Tag="#FF00ACC1"
+                                BorderBrush="#AAAAAA" BorderThickness="1" Cursor="Hand" Focusable="False"
+                                ToolTip="水色"/>
+                        <Button Width="22" Height="22" Margin="1" Background="#FDD835"
+                                Click="TextColorSwatch_Click" Tag="#FFFDD835"
+                                BorderBrush="#AAAAAA" BorderThickness="1" Cursor="Hand" Focusable="False"
+                                ToolTip="黄色"/>
+                    </UniformGrid>
+                </Border>
+            </Popup>
 
         </Grid>
     </Border>

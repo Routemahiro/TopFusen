@@ -1,10 +1,13 @@
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
+using System.Windows.Shapes;
 using Serilog;
 using TopFusen.Interop;
 using TopFusen.Models;
@@ -65,6 +68,14 @@ public partial class NoteWindow : Window
     private static readonly DropShadowEffect SelectedShadow
         = new() { BlurRadius = 10, ShadowDepth = 2, Opacity = 0.35, Color = Colors.Black };
 
+    // --- Phase 4: ツールバー ---
+    /// <summary>ツールバーの文字サイズプリセット</summary>
+    private static readonly int[] FontSizePresets = { 8, 10, 12, 14, 16, 18, 20, 24, 28, 36, 48 };
+    /// <summary>ツールバーボタンのアクティブ時背景色</summary>
+    private static readonly SolidColorBrush ToolbarActiveBg = new(Color.FromArgb(60, 0, 0, 0));
+    /// <summary>ツールバー状態更新中フラグ（フィードバックループ防止）</summary>
+    private bool _isUpdatingToolbar;
+
     /// <summary>
     /// 付箋ウィンドウを生成する
     /// </summary>
@@ -79,6 +90,7 @@ public partial class NoteWindow : Window
         IsInEditMode = false;
 
         InitializeComponent();
+        InitializeToolbar(); // Phase 4: ツールバー初期化
 
         // 初期位置・サイズの適用
         Left = model.Placement.DipX;
@@ -240,6 +252,12 @@ public partial class NoteWindow : Window
         {
             Keyboard.ClearFocus();
         }
+
+        // Phase 4: ポップアップを閉じる（UI非表示時）
+        if (!showUI)
+        {
+            TextColorPopup.IsOpen = false;
+        }
     }
 
     // ==========================================
@@ -284,6 +302,193 @@ public partial class NoteWindow : Window
         if (IsInEditMode)
         {
             NoteActivated?.Invoke(Model.NoteId);
+        }
+    }
+
+    // ==========================================
+    //  Phase 4: リッチテキスト装飾ツールバー
+    // ==========================================
+
+    /// <summary>
+    /// ツールバーの初期化（ComboBox のプリセット値設定 + イベント登録）
+    /// </summary>
+    private void InitializeToolbar()
+    {
+        // 文字サイズプリセットを ComboBox に追加
+        foreach (var size in FontSizePresets)
+        {
+            FontSizeCombo.Items.Add(size);
+        }
+        FontSizeCombo.SelectedItem = 14;
+
+        // RichTextBox の選択変更でツールバー状態を更新
+        NoteRichTextBox.SelectionChanged += NoteRichTextBox_SelectionChanged;
+    }
+
+    /// <summary>
+    /// RichTextBox の選択が変更された時にツールバーの状態を更新する
+    /// </summary>
+    private void NoteRichTextBox_SelectionChanged(object sender, RoutedEventArgs e)
+    {
+        if (!IsInEditMode || !IsSelected) return;
+        UpdateToolbarState();
+    }
+
+    /// <summary>
+    /// ツールバーのボタン状態を現在の選択範囲に合わせて更新する
+    /// </summary>
+    private void UpdateToolbarState()
+    {
+        _isUpdatingToolbar = true;
+        try
+        {
+            var selection = NoteRichTextBox.Selection;
+
+            // --- 太字 ---
+            var fontWeight = selection.GetPropertyValue(TextElement.FontWeightProperty);
+            SetToolbarButtonActive(BoldButton,
+                fontWeight is FontWeight fw && fw == FontWeights.Bold);
+
+            // --- 下線・取り消し線 ---
+            var textDeco = selection.GetPropertyValue(Inline.TextDecorationsProperty);
+            bool hasUnderline = false;
+            bool hasStrikethrough = false;
+            if (textDeco is TextDecorationCollection decos)
+            {
+                hasUnderline = decos.Any(d => d.Location == TextDecorationLocation.Underline);
+                hasStrikethrough = decos.Any(d => d.Location == TextDecorationLocation.Strikethrough);
+            }
+            SetToolbarButtonActive(UnderlineButton, hasUnderline);
+            SetToolbarButtonActive(StrikethroughButton, hasStrikethrough);
+
+            // --- 文字サイズ ---
+            var fontSize = selection.GetPropertyValue(TextElement.FontSizeProperty);
+            if (fontSize is double size)
+            {
+                var intSize = (int)Math.Round(size);
+                FontSizeCombo.SelectedItem = FontSizePresets.Contains(intSize) ? (object)intSize : null;
+            }
+            else
+            {
+                FontSizeCombo.SelectedItem = null;
+            }
+
+            // --- 文字色インジケータ ---
+            var foreground = selection.GetPropertyValue(TextElement.ForegroundProperty);
+            if (foreground is SolidColorBrush brush)
+            {
+                TextColorIndicator.Fill = brush;
+            }
+        }
+        finally
+        {
+            _isUpdatingToolbar = false;
+        }
+    }
+
+    /// <summary>
+    /// ツールバーボタンのアクティブ/非アクティブ表示を切り替える
+    /// </summary>
+    private static void SetToolbarButtonActive(Button button, bool isActive)
+    {
+        button.Background = isActive ? ToolbarActiveBg : Brushes.Transparent;
+    }
+
+    // --- 装飾ボタン Click ハンドラ ---
+
+    /// <summary>太字トグル（Ctrl+B と同等）</summary>
+    private void BoldButton_Click(object sender, RoutedEventArgs e)
+    {
+        EditingCommands.ToggleBold.Execute(null, NoteRichTextBox);
+        NoteRichTextBox.Focus();
+    }
+
+    /// <summary>下線トグル（Ctrl+U と同等）</summary>
+    private void UnderlineButton_Click(object sender, RoutedEventArgs e)
+    {
+        EditingCommands.ToggleUnderline.Execute(null, NoteRichTextBox);
+        NoteRichTextBox.Focus();
+    }
+
+    /// <summary>取り消し線トグル（手動実装 — EditingCommands にないため）</summary>
+    private void StrikethroughButton_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleStrikethrough();
+        NoteRichTextBox.Focus();
+    }
+
+    /// <summary>
+    /// 取り消し線のトグル処理
+    /// 選択範囲の TextDecorations から Strikethrough を追加/除去する
+    /// ※ 選択範囲が混在装飾の場合、既存の他の装飾が失われる可能性あり（v0.2 許容）
+    /// </summary>
+    private void ToggleStrikethrough()
+    {
+        var selection = NoteRichTextBox.Selection;
+        var currentDecorations = selection.GetPropertyValue(Inline.TextDecorationsProperty)
+            as TextDecorationCollection;
+
+        bool hasStrikethrough = currentDecorations != null &&
+            currentDecorations.Any(d => d.Location == TextDecorationLocation.Strikethrough);
+
+        TextDecorationCollection newDecorations;
+        if (hasStrikethrough)
+        {
+            // 取り消し線を除去（他の装飾は保持）
+            newDecorations = new TextDecorationCollection(
+                currentDecorations!.Where(d => d.Location != TextDecorationLocation.Strikethrough));
+        }
+        else
+        {
+            // 取り消し線を追加（他の装飾は保持）
+            newDecorations = currentDecorations != null
+                ? new TextDecorationCollection(currentDecorations)
+                : new TextDecorationCollection();
+            newDecorations.Add(TextDecorations.Strikethrough[0]);
+        }
+
+        selection.ApplyPropertyValue(Inline.TextDecorationsProperty, newDecorations);
+    }
+
+    // --- 文字サイズ ComboBox ---
+
+    /// <summary>文字サイズ ComboBox の選択変更</summary>
+    private void FontSizeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingToolbar) return;
+        if (FontSizeCombo.SelectedItem is int size)
+        {
+            NoteRichTextBox.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, (double)size);
+            NoteRichTextBox.Focus();
+        }
+    }
+
+    /// <summary>文字サイズ ComboBox のドロップダウン閉じ → RichTextBox にフォーカス戻し</summary>
+    private void FontSizeCombo_DropDownClosed(object? sender, EventArgs e)
+    {
+        NoteRichTextBox.Focus();
+    }
+
+    // --- 文字色パレット ---
+
+    /// <summary>文字色ボタン → パレット Popup を開閉</summary>
+    private void TextColorButton_Click(object sender, RoutedEventArgs e)
+    {
+        TextColorPopup.IsOpen = !TextColorPopup.IsOpen;
+    }
+
+    /// <summary>文字色パレットのスウォッチクリック → 選択範囲に色を適用</summary>
+    private void TextColorSwatch_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string colorStr)
+        {
+            var color = (Color)ColorConverter.ConvertFromString(colorStr);
+            var brush = new SolidColorBrush(color);
+            brush.Freeze();
+            NoteRichTextBox.Selection.ApplyPropertyValue(TextElement.ForegroundProperty, brush);
+            TextColorIndicator.Fill = brush;
+            TextColorPopup.IsOpen = false;
+            NoteRichTextBox.Focus();
         }
     }
 }
