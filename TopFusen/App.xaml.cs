@@ -70,8 +70,9 @@ public partial class App : Application
         // 5. SessionEnding フック（Windows ログオフ/シャットダウン時の保存）
         SessionEnding += OnSessionEnding;
 
-        // 6. NoteManager 初期化
+        // 6. NoteManager 初期化 + オーナーウィンドウ生成（DJ-7）
         _noteManager = _serviceProvider.GetRequiredService<NoteManager>();
+        _noteManager.InitializeOwnerWindow();
 
         // 7. 仮想デスクトップサービス初期化（Phase 3.5 スパイク / DJ-4: UIスレッドで初期化）
         _vdService = _serviceProvider.GetRequiredService<VirtualDesktopService>();

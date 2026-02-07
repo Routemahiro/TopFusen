@@ -12,7 +12,8 @@ namespace TopFusen.Views;
 /// <summary>
 /// 付箋ウィンドウ
 /// - Borderless + TopMost + AllowsTransparency
-/// - ShowInTaskbar=False + WS_EX_TOOLWINDOW で Alt+Tab から隠す
+/// - Alt+Tab 非表示: オーナーウィンドウ方式（DJ-7）+ ShowInTaskbar=False
+///   ※ WS_EX_TOOLWINDOW は仮想デスクトップ管理から除外されるため使用しない
 /// - クリック透過: WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WM_NCHITTEST フック の三重制御
 /// - Phase 3: WindowChrome でリサイズ + DragMove + 選択状態管理
 /// </summary>
@@ -91,6 +92,7 @@ public partial class NoteWindow : Window
 
     /// <summary>
     /// HWND 生成後に拡張スタイルとメッセージフックを適用
+    /// DJ-7: WS_EX_TOOLWINDOW は除去（オーナーウィンドウ方式で Alt+Tab 非表示を実現）
     /// </summary>
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
@@ -99,11 +101,12 @@ public partial class NoteWindow : Window
 
         var exStyle = NativeMethods.GetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE);
 
-        // Alt+Tab / タスクバーに表示しない
-        exStyle |= NativeMethods.WS_EX_TOOLWINDOW;
-        exStyle &= ~NativeMethods.WS_EX_APPWINDOW;
+        // DJ-7: WS_EX_TOOLWINDOW は使わない（仮想デスクトップ管理から除外されるため）
+        // Alt+Tab 非表示は Owner ウィンドウ + ShowInTaskbar=false で実現
+        // 念のため TOOLWINDOW が付いていたら外す
+        exStyle &= ~NativeMethods.WS_EX_TOOLWINDOW;
 
-        // 初期クリック透過状態の適用
+        // 初期クリック透過状態の適用（三重制御の一部）
         if (_initialClickThrough)
         {
             exStyle |= NativeMethods.WS_EX_TRANSPARENT;
@@ -113,11 +116,11 @@ public partial class NoteWindow : Window
         NativeMethods.SetWindowLong(_hwnd, NativeMethods.GWL_EXSTYLE, exStyle);
         _isClickThrough = _initialClickThrough;
 
-        // WM_NCHITTEST メッセージフックを登録
+        // WM_NCHITTEST メッセージフックを登録（三重制御の一部）
         _hwndSource?.AddHook(WndProc);
 
-        Log.Information("NoteWindow 拡張スタイル適用: {NoteId} (ClickThrough={ClickThrough}, ExStyle=0x{ExStyle:X8})",
-            Model.NoteId, _isClickThrough, exStyle);
+        Log.Information("NoteWindow 拡張スタイル適用: {NoteId} (ClickThrough={ClickThrough}, ExStyle=0x{ExStyle:X8}, HasOwner={HasOwner})",
+            Model.NoteId, _isClickThrough, exStyle, Owner != null);
     }
 
     /// <summary>

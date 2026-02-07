@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Interop;
 using Serilog;
 using TopFusen.Models;
 using TopFusen.Views;
@@ -10,10 +11,18 @@ namespace TopFusen.Services;
 /// Phase 1: メモリ上のみ管理。永続化は Phase 5 で実装。
 /// Phase 2: 編集モード管理 + クリック透過の一括制御
 /// Phase 3: 選択状態管理 + 複製 + イベント連携
+/// Phase 3.7: DJ-7 対応 — オーナーウィンドウ方式で Alt+Tab 非表示 + 仮想デスクトップ参加
 /// </summary>
 public class NoteManager
 {
     private readonly List<(NoteModel Model, NoteWindow Window)> _notes = new();
+
+    /// <summary>
+    /// 全 NoteWindow のオーナーとなる非表示ウィンドウ（DJ-7 対応）
+    /// オーナー付きウィンドウは Alt+Tab に表示されないため、WS_EX_TOOLWINDOW が不要になる。
+    /// これにより仮想デスクトップの MoveWindowToDesktop が正常に機能する。
+    /// </summary>
+    private Window? _ownerWindow;
 
     /// <summary>管理中の全付箋モデル</summary>
     public IReadOnlyList<NoteModel> Notes
@@ -31,6 +40,39 @@ public class NoteManager
 
     /// <summary>現在選択中の付箋ID（null=選択なし）</summary>
     public Guid? SelectedNoteId { get; private set; }
+
+    // ==========================================
+    //  Phase 3.7: オーナーウィンドウ管理（DJ-7 対応）
+    // ==========================================
+
+    /// <summary>
+    /// オーナーウィンドウを初期化する（アプリ起動時に1回呼ぶ）
+    /// このウィンドウは非表示で、全 NoteWindow の Owner として機能する。
+    /// Owner 付きウィンドウは Alt+Tab に表示されず、かつ仮想デスクトップ管理に正常参加する。
+    /// </summary>
+    public void InitializeOwnerWindow()
+    {
+        if (_ownerWindow != null) return;
+
+        _ownerWindow = new Window
+        {
+            Width = 0,
+            Height = 0,
+            WindowStyle = WindowStyle.None,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            AllowsTransparency = true,
+            Background = System.Windows.Media.Brushes.Transparent,
+            Visibility = Visibility.Hidden,
+            Title = "TopFusen_OwnerWindow"
+        };
+
+        // HWND を生成する（Show せずにハンドルを確保）
+        var helper = new WindowInteropHelper(_ownerWindow);
+        helper.EnsureHandle();
+
+        Log.Information("オーナーウィンドウを初期化しました (HWND=0x{Handle:X8})", helper.Handle);
+    }
 
     // ==========================================
     //  編集モード管理
@@ -117,17 +159,24 @@ public class NoteManager
         var clickThrough = !IsEditMode;
         var window = new NoteWindow(model, clickThrough);
 
+        // DJ-7: オーナーウィンドウを設定（Alt+Tab 非表示 + 仮想デスクトップ参加）
+        if (_ownerWindow != null)
+        {
+            window.Owner = _ownerWindow;
+        }
+
         // イベント購読
         WireUpNoteEvents(window);
 
         _notes.Add((model, window));
         window.Show();
 
-        Log.Information("付箋を作成: {NoteId} (位置: {X:F0}, {Y:F0}, サイズ: {W:F0}x{H:F0}, モード: {Mode})",
+        Log.Information("付箋を作成: {NoteId} (位置: {X:F0}, {Y:F0}, サイズ: {W:F0}x{H:F0}, モード: {Mode}, Owner={HasOwner})",
             model.NoteId,
             model.Placement.DipX, model.Placement.DipY,
             model.Placement.DipWidth, model.Placement.DipHeight,
-            IsEditMode ? "編集" : "非干渉");
+            IsEditMode ? "編集" : "非干渉",
+            _ownerWindow != null);
 
         return window;
     }
@@ -171,6 +220,12 @@ public class NoteManager
 
         var clickThrough = !IsEditMode;
         var window = new NoteWindow(model, clickThrough);
+
+        // DJ-7: オーナーウィンドウを設定
+        if (_ownerWindow != null)
+        {
+            window.Owner = _ownerWindow;
+        }
 
         // イベント購読
         WireUpNoteEvents(window);
@@ -224,6 +279,7 @@ public class NoteManager
 
     /// <summary>
     /// 全ウィンドウを閉じる（アプリ終了時用）
+    /// オーナーウィンドウも閉じる（DJ-7）
     /// </summary>
     public void CloseAllWindows()
     {
@@ -231,12 +287,22 @@ public class NoteManager
 
         foreach (var (_, window) in _notes.ToList())
         {
+            // Owner を解除してから閉じる（Owner が先に閉じると子も連鎖で閉じてしまうため）
+            window.Owner = null;
             UnwireNoteEvents(window);
             window.Close();
         }
 
         _notes.Clear();
         SelectedNoteId = null;
+
+        // オーナーウィンドウを閉じる（DJ-7）
+        if (_ownerWindow != null)
+        {
+            _ownerWindow.Close();
+            _ownerWindow = null;
+            Log.Information("オーナーウィンドウを閉じました");
+        }
     }
 
     // ==========================================
