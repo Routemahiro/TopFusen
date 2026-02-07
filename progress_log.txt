@@ -647,3 +647,52 @@ Phase 9: Z順管理（FR-ZORDER）— 2026-02-07
   - HandleDesktopSwitch 後に切替先VDの Z順を適用
 
 Phase 9 完了（ビルド成功・Lint クリーン）。次は Phase 10。
+
+==========================================
+Phase 10: 一時非表示 + ホットキー + 自動起動
+==========================================
+実装方針: 案B（バランス）— 全機能実装、ホットキー設定はトレイ簡易版
+
+[P10-1] 一時非表示トグル（FR-HIDE）
+  - NoteManager.SetHidden(bool) で全付箋を DWM Cloak / Uncloak
+  - _appSettings.IsHidden を永続化（settings.json）
+  - 再表示時は現在VDの付箋のみ Uncloak + Z順再適用
+  - LoadAll() で非表示状態を復元（FR-HIDE-2）
+  - トレイメニュー: 「一時的に非表示」/「付箋を再表示」切替
+
+[P10-2] 編集ON中に非表示 → 強制編集OFF（FR-HIDE-3）
+  - SetHidden(true) 内で SetEditMode(false) を先行呼び出し
+  - 再表示しても編集OFFのまま維持
+
+[P10-3] 非表示中の新規作成（仕様6.1）
+  - CreateNote() で IsHidden チェック → Show() 後に即 Cloak
+  - HandleDesktopSwitch() で IsHidden 中は表示制御スキップ
+
+[P10-4] ホットキー実装（FR-HOTKEY）
+  - HotkeyService.cs 新規作成
+  - NativeMethods に RegisterHotKey / UnregisterHotKey P/Invoke 追加
+  - オーナーウィンドウに HwndSource.AddHook で WM_HOTKEY フック
+  - 既定: Ctrl+Win+E（MOD_CONTROL | MOD_WIN + VK_E + MOD_NOREPEAT）
+  - 非表示中はホットキーを無視（ToggleEditMode で IsHidden チェック）
+
+[P10-5] ホットキー設定UI（トレイ簡易版）
+  - トレイメニュー「ホットキー: ON (Ctrl+Win+E)」/「ホットキー: OFF」
+  - キー変更は Phase 11 の設定画面に延期
+
+[P10-6] 登録失敗時のエラー表示
+  - トレイメニューに「ホットキー: エラー」表示 + ログ出力
+  - H.NotifyIcon 2.x では BalloonTip API が異なるため、メニュー表示方式に変更
+
+[P10-7] 自動起動（FR-BOOT-1）
+  - AutoStartService.cs 新規作成（static クラス）
+  - HKCU\Software\Microsoft\Windows\CurrentVersion\Run に登録/解除
+  - 値: "\"<exePath>\" --autostart"
+  - トレイメニュー「自動起動: ON」/「自動起動: OFF」
+
+[P10-ICON] トレイアイコングレー化
+  - app_gray.ico を System.Drawing で生成（グレースケール変換）
+  - csproj に Resource として追加
+  - UpdateTrayIconAppearance(bool) で IconSource + ToolTipText を切替
+  - グレーアイコンが無い場合は ToolTip のみで視認（graceful fallback）
+
+Phase 10 実装完了（ビルド成功・Lint クリーン）。P10-VERIFY は手動検証待ち。
