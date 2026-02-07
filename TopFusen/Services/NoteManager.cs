@@ -155,9 +155,11 @@ public class NoteManager
         // 重なり検知 + ずらし（既存付箋と完全重複を避ける）
         ApplyOverlapOffset(model, workArea);
 
-        // 現在の編集モードに基づいてクリック透過状態を決定
-        var clickThrough = !IsEditMode;
-        var window = new NoteWindow(model, clickThrough);
+        // DJ-7: ウィンドウは必ず「クリック透過なし」で生成する
+        // WS_EX_TRANSPARENT/NOACTIVATE が生成時に付いていると、
+        // OS が仮想デスクトップの追跡対象から外す（TOOLWINDOW と同じ問題）。
+        // Show() の後に SetClickThrough() で透過を適用する。
+        var window = new NoteWindow(model, clickThrough: false);
 
         // DJ-7: オーナーウィンドウを設定（Alt+Tab 非表示 + 仮想デスクトップ参加）
         if (_ownerWindow != null)
@@ -170,6 +172,13 @@ public class NoteManager
 
         _notes.Add((model, window));
         window.Show();
+
+        // DJ-7: Show() 後にクリック透過を適用（OS に通常ウィンドウとして認識させてから）
+        // Phase 8: MoveWindowToDesktop はこの前（Show() と SetClickThrough() の間）で行う
+        if (!IsEditMode)
+        {
+            window.SetClickThrough(true);
+        }
 
         Log.Information("付箋を作成: {NoteId} (位置: {X:F0}, {Y:F0}, サイズ: {W:F0}x{H:F0}, モード: {Mode}, Owner={HasOwner})",
             model.NoteId,
@@ -218,8 +227,8 @@ public class NoteManager
         var workArea = SystemParameters.WorkArea;
         ClampToWorkArea(model, workArea);
 
-        var clickThrough = !IsEditMode;
-        var window = new NoteWindow(model, clickThrough);
+        // DJ-7: 複製も「クリック透過なし」で生成 → Show() 後に適用
+        var window = new NoteWindow(model, clickThrough: false);
 
         // DJ-7: オーナーウィンドウを設定
         if (_ownerWindow != null)
@@ -232,6 +241,12 @@ public class NoteManager
 
         _notes.Add((model, window));
         window.Show();
+
+        // DJ-7: Show() 後にクリック透過を適用
+        if (!IsEditMode)
+        {
+            window.SetClickThrough(true);
+        }
 
         // 複製された付箋を選択
         if (IsEditMode)

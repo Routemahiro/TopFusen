@@ -56,11 +56,19 @@
   - `MoveWindowToDesktop` は成功を返すが実際には移動しない
   - 結果としてウィンドウが全デスクトップで表示される
 - **検証**: 普通の Window（TOOLWINDOW なし）では `MoveWindowToDesktop` が正常に動作することを確認
-- **対策（Phase 8 で実施）**: Alt+Tab 非表示を **オーナーウィンドウ方式** に変更する
+- **対策（Phase 3.7 で実施済み）**: Alt+Tab 非表示を **オーナーウィンドウ方式** に変更
   - 非表示のオーナー Window を1つ作成し、NoteWindow の Owner に設定
   - オーナー付きウィンドウは Alt+Tab に出ない（WS_EX_TOOLWINDOW 不要）
   - かつ、仮想デスクトップ管理に正常に参加できる
   - `ShowInTaskbar=false` はそのまま維持
+
+### DJ-8: WS_EX_TRANSPARENT/NOACTIVATE も生成時に付けると仮想デスクトップ追跡外（Phase 3.7 追加検証で判明）
+- **問題**: `WS_EX_TRANSPARENT` + `WS_EX_NOACTIVATE` がウィンドウ生成時（OnSourceInitialized）に付いていると、OS が仮想デスクトップの追跡対象から外す
+  - 後から外しても（テスト 1B）手遅れ — TOOLWINDOW と同じパターン
+  - 編集ON（TRANSPARENT=False）で作成した付箋は移動成功、編集OFF（TRANSPARENT=True）で作成した付箋は移動失敗
+- **対策（Phase 3.7 で実施済み）**: NoteWindow を**常にクリック透過なしで生成**し、`Show()` の**後に** `SetClickThrough()` を適用する
+  - OS に「通常ウィンドウ」として認識させてから透過を掛ける
+  - Phase 8 での MoveWindowToDesktop は Show() と SetClickThrough() の間で行う
 
 ### DJ-6: クリック透過は三重制御方式（Phase 2 で判明）
 - WPF `AllowsTransparency=True` は `WS_EX_LAYERED` を自動付与する
