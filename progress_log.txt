@@ -696,3 +696,42 @@ Phase 10: 一時非表示 + ホットキー + 自動起動
   - グレーアイコンが無い場合は ToolTip のみで視認（graceful fallback）
 
 Phase 10 実装完了（ビルド成功・Lint クリーン）。P10-VERIFY は手動検証待ち。
+
+==========================================
+Phase 11: 設定画面（統合）
+==========================================
+実装方針: 案B（バランス）— 4タブ構成、ホットキーはプリセット選択方式
+
+[P11-1] 設定ウィンドウ骨格
+  - SettingsWindow.xaml: TabControl + 4タブ（一般/フォント/付箋管理/詳細）
+  - ZOrderWindow のスタイルをベースに統一感のある UI
+  - 480x520 の適切なサイズ、リサイズ可能
+
+[P11-2] 一般タブ
+  - 自動起動 CheckBox: AutoStartService.IsEnabled() と連動
+  - ホットキー有効/無効 CheckBox + プリセット ComboBox（5種）
+    - Ctrl+Shift+Alt+E / Ctrl+Shift+F12 / Ctrl+Alt+F11 / Ctrl+Win+N / Ctrl+Shift+F9
+  - ステータス表示: 登録成功（緑）/ エラー（赤）/ 無効（グレー）
+
+[P11-3] フォントタブ
+  - 許可リスト ListBox + システムフォントの ComboBox から追加
+  - 削除ボタンで選択フォントを除去
+  - 変更時に全付箋の SetFontAllowList() を即時呼び出し
+
+[P11-4] 付箋管理タブ
+  - ZOrderWindow と同等の D&D 並び替え（GongSolutions.Wpf.DragDrop）
+  - 現在デスクトップの付箋のみ表示 + ドラッグ後に NoteManager.UpdateZOrder() 呼び出し
+
+[P11-5] 詳細タブ
+  - ログフォルダを開くボタン: Process.Start(UseShellExecute) で Explorer を起動
+  - 診断パッケージ: SaveFileDialog → ZipFile.Open で zip 生成
+    - logs/ (最新5本), settings.json, notes.json, environment.txt
+    - オプション: RTF ファイル含む/含まない チェックボックス
+  - バージョン情報: Assembly バージョン, .NET, OS, データパス
+
+[P11-6] App.xaml.cs 連携
+  - トレイメニュー簡素化: 編集モード / 新規 / 非表示 / 設定 / VDデバッグ / 終了
+  - ホットキーON/OFF, 自動起動ON/OFF, Z順管理 → 設定画面に統合
+  - OpenSettingsWindow(): 二重起動防止（_settingsWindow フィールド + Closed イベント）
+
+Phase 11 実装完了（ビルド成功・Lint クリーン）。P11-VERIFY は手動検証待ち。
