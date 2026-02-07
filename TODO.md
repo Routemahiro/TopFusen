@@ -258,7 +258,7 @@
 
 ---
 
-## Phase 3.7: DJ-7 対応 — WS_EX_TOOLWINDOW → オーナーウィンドウ方式 🔧
+## Phase 3.7: DJ-7 対応 — WS_EX_TOOLWINDOW → オーナーウィンドウ方式 ✅ (2026-02-07 完了)
 > 目標: Alt+Tab 非表示を WS_EX_TOOLWINDOW ではなくオーナーウィンドウ方式に変更し、仮想デスクトップ管理に参加できるようにする
 > 背景: Phase 3.5 スパイクで判明した DJ-7 問題（WS_EX_TOOLWINDOW ウィンドウは MoveWindowToDesktop が効かない）
 > ★ Phase 4〜7 で NoteWindow を大量改修する前に基盤変更を確定させる（手戻りリスク回避）
@@ -272,16 +272,16 @@
   - `OnSourceInitialized` の `WS_EX_TOOLWINDOW` 付与 + `WS_EX_APPWINDOW` 除去を削除
   - Owner 付きウィンドウ + ShowInTaskbar=false で Alt+Tab 非表示が成立
   - クリック透過（三重制御: WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WM_NCHITTEST）はそのまま維持
-- [ ] **P3.7-VERIFY: DJ-7 検証**
-  - [ ] Alt+Tab に付箋が出ない
-  - [ ] タスクバーに付箋が出ない
-  - [ ] `GetWindowDesktopId` が有効な GUID を返す（Guid.Empty ではない）
-  - [ ] `MoveWindowToDesktop` で実際に付箋が別デスクトップへ移動する
-  - [ ] クリック透過（三重制御）が引き続き正常に動作する
-  - [ ] Topmost が維持されている
-  - [ ] AllowsTransparency + Owner の組み合わせで問題がない
-  - [ ] ドラッグ移動・リサイズが引き続き正常に動作する
-  - [ ] 複数付箋の選択状態管理が引き続き正常
+- [x] **P3.7-VERIFY: DJ-7 検証** (2026-02-07 完了 ★実機確認済み)
+  - [x] Alt+Tab に付箋が出ない
+  - [x] タスクバーに付箋が出ない
+  - [x] `GetWindowDesktopId` が有効な GUID を返す（Guid.Empty ではない）
+  - [x] `MoveWindowToDesktop` で実際に付箋が別デスクトップへ移動する（ExStyle=0x00080108, TOOLWINDOW=False で成功）
+  - [x] クリック透過（三重制御）が引き続き正常に動作する
+  - [x] Topmost が維持されている（TOPMOST=True 確認済み）
+  - [x] AllowsTransparency + Owner の組み合わせで問題がない
+  - [x] ドラッグ移動・リサイズが引き続き正常に動作する
+  - [x] 複数付箋の選択状態管理が引き続き正常
 
 ---
 
@@ -646,7 +646,7 @@
 | Phase 2 | Win32 Interop + モード切替 | ✅ 完了 (2026-02-06) |
 | Phase 3 | 移動・リサイズ + 基本UI | ✅ 完了 (2026-02-07) |
 | Phase 3.5 | 仮想デスクトップ技術スパイク | ✅ 完了 (2026-02-07) |
-| Phase 3.7 | DJ-7: オーナーウィンドウ方式変更 | 🔧 作業中 |
+| Phase 3.7 | DJ-7: オーナーウィンドウ方式変更 | ✅ 完了 (2026-02-07) |
 | Phase 4 | リッチテキスト編集 | 未着手 |
 | Phase 5 | 永続化 | 未着手 |
 | Phase 6 | 見た目・スタイル | 未着手 |

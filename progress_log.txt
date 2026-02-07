@@ -307,18 +307,17 @@ Phase 4〜7 の大量改修前に基盤変更を確定させるため、前倒�
   - Owner + ShowInTaskbar=false で Alt+Tab 非表示が成立
   - クリック透過（三重制御: WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WM_NCHITTEST）はそのまま維持
 
-[検証待ち] P3.7-VERIFY: DJ-7 検証
-  - ビルド成功（エラー0、警告0）を確認済み
-  - 以下はユーザー実機で検証予定:
-    ☐ Alt+Tab に付箋が出ない
-    ☐ タスクバーに付箋が出ない
-    ☐ GetWindowDesktopId が有効な GUID を返す（Guid.Empty ではない）
-    ☐ MoveWindowToDesktop で実際に付箋が別デスクトップへ移動する
-    ☐ クリック透過（三重制御）が引き続き正常
-    ☐ Topmost が維持されている
-    ☐ AllowsTransparency + Owner の組み合わせで問題なし
-    ☐ ドラッグ移動・リサイズが正常
-    ☐ 複数付箋の選択状態管理が正常
+[検証] P3.7-VERIFY: 全項目合格（★実機確認済み）
+  ✅ ビルド成功（エラー0、警告0）
+  ✅ Alt+Tab に付箋が出ない
+  ✅ タスクバーに付箋が出ない
+  ✅ GetWindowDesktopId が有効な GUID を返す（ExStyle=0x00080108, TOOLWINDOW=False）
+  ✅ MoveWindowToDesktop で実際に付箋が別デスクトップへ移動する（テスト 1A: そのまま Move で成功）
+  ✅ クリック透過（三重制御）が引き続き正常
+  ✅ Topmost が維持されている（TOPMOST=True 確認済み）
+  ✅ AllowsTransparency + Owner の組み合わせで問題なし
+  ✅ ドラッグ移動・リサイズが正常
+  ✅ 複数付箋の選択状態管理が正常
 
 変更ファイル:
   - TopFusen/Services/NoteManager.cs（オーナーウィンドウ生成・管理 + Owner 設定）
