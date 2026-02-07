@@ -36,11 +36,8 @@ public partial class App : Application
     /// <summary>非表示メニュー項目（トグル表示更新用）</summary>
     private MenuItem? _hideMenuItem;
 
-    /// <summary>ホットキーメニュー項目（ON/OFF表示更新用）</summary>
-    private MenuItem? _hotkeyMenuItem;
-
-    /// <summary>自動起動メニュー項目（ON/OFF表示更新用）</summary>
-    private MenuItem? _autoStartMenuItem;
+    /// <summary>設定ウィンドウ（二重起動防止用）</summary>
+    private Views.SettingsWindow? _settingsWindow;
 
     /// <summary>
     /// DI コンテナから取得したサービスプロバイダ
@@ -134,11 +131,7 @@ public partial class App : Application
         if (_hotkeyService.LastError != null)
         {
             Log.Warning("ホットキー登録エラー: {Error}", _hotkeyService.LastError);
-            // メニュー項目にエラー状態を反映
-            if (_hotkeyMenuItem != null)
-            {
-                _hotkeyMenuItem.Header = "⌨ ホットキー: エラー ⚠";
-            }
+            // Phase 11: エラー詳細は設定画面で確認可能
         }
 
         Log.Information("アプリケーション起動完了（Phase 10: トレイ常駐 + モード切替 + 永続化 + VD自前管理 + 非表示/ホットキー/自動起動）");
@@ -169,7 +162,8 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// トレイ右クリックメニューの構築（FR-TRAY + Phase 10）
+    /// トレイ右クリックメニューの構築（FR-TRAY + Phase 11 統合）
+    /// Phase 11: ホットキー/自動起動/Z順管理は設定画面に統合
     /// </summary>
     private ContextMenu CreateTrayContextMenu()
     {
@@ -190,7 +184,7 @@ public partial class App : Application
 
         menu.Items.Add(new Separator());
 
-        // --- 一時的に非表示（FR-TRAY-3）--- Phase 10 実装
+        // --- 一時的に非表示（FR-TRAY-3）--- Phase 10
         var isHidden = _noteManager?.IsHidden ?? false;
         _hideMenuItem = new MenuItem
         {
@@ -202,81 +196,22 @@ public partial class App : Application
             var newHidden = !_noteManager.IsHidden;
             _noteManager.SetHidden(newHidden);
             _hideMenuItem.Header = newHidden ? "👁 付箋を再表示" : "👁 一時的に非表示";
-            // FR-HIDE-3: 非表示にしたら編集OFFになるので、メニュー表示を同期
             if (newHidden)
             {
                 _editModeMenuItem!.Header = "✏️ 編集モード: OFF";
             }
-            // アイコンのグレー化
             UpdateTrayIconAppearance(newHidden);
         };
         menu.Items.Add(_hideMenuItem);
 
-        // --- Z順管理（Phase 9）---
-        var zOrderItem = new MenuItem { Header = "📊 Z順管理..." };
-        zOrderItem.Click += async (_, _) =>
-        {
-            await Task.Delay(200);
-            if (_noteManager == null) return;
-            var zOrderWindow = new Views.ZOrderWindow(_noteManager);
-            zOrderWindow.ShowDialog();
-        };
-        menu.Items.Add(zOrderItem);
-
-        // --- 設定を開く（FR-TRAY-4）--- stub
+        // --- 設定を開く（FR-TRAY-4）--- Phase 11 実装
         var settingsItem = new MenuItem { Header = "⚙ 設定..." };
-        settingsItem.Click += (_, _) =>
+        settingsItem.Click += async (_, _) =>
         {
-            Log.Information("設定画面（未実装）");
+            await Task.Delay(200); // メニューが閉じるのを待つ
+            OpenSettingsWindow();
         };
         menu.Items.Add(settingsItem);
-
-        menu.Items.Add(new Separator());
-
-        // --- Phase 10: ホットキー ON/OFF ---
-        var hotkeyEnabled = _noteManager?.AppSettings.Hotkey.Enabled ?? true;
-        _hotkeyMenuItem = new MenuItem
-        {
-            Header = hotkeyEnabled ? "⌨ ホットキー: ON (Ctrl+Shift+Alt+E)" : "⌨ ホットキー: OFF"
-        };
-        _hotkeyMenuItem.Click += (_, _) =>
-        {
-            if (_noteManager == null || _hotkeyService == null) return;
-            var newEnabled = !_noteManager.AppSettings.Hotkey.Enabled;
-            _noteManager.AppSettings.Hotkey.Enabled = newEnabled;
-            _hotkeyService.UpdateSettings(_noteManager.AppSettings.Hotkey);
-            _hotkeyMenuItem.Header = newEnabled
-                ? "⌨ ホットキー: ON (Ctrl+Shift+Alt+E)" : "⌨ ホットキー: OFF";
-            _persistence?.ScheduleSave();
-
-            if (newEnabled && _hotkeyService.LastError != null)
-            {
-                // 登録失敗時はメニュー表示でエラーを伝える
-                _hotkeyMenuItem.Header = "⌨ ホットキー: エラー ⚠";
-                Log.Warning("ホットキー再登録エラー: {Error}", _hotkeyService.LastError);
-            }
-        };
-        menu.Items.Add(_hotkeyMenuItem);
-
-        // --- Phase 10: 自動起動 ON/OFF ---
-        var autoStartEnabled = AutoStartService.IsEnabled();
-        _autoStartMenuItem = new MenuItem
-        {
-            Header = autoStartEnabled ? "🚀 自動起動: ON ✓" : "🚀 自動起動: OFF"
-        };
-        _autoStartMenuItem.Click += (_, _) =>
-        {
-            if (_noteManager == null) return;
-            var currentState = AutoStartService.IsEnabled();
-            var newState = !currentState;
-            if (AutoStartService.SetEnabled(newState))
-            {
-                _noteManager.AppSettings.AutoStartEnabled = newState;
-                _autoStartMenuItem.Header = newState ? "🚀 自動起動: ON ✓" : "🚀 自動起動: OFF";
-                _persistence?.ScheduleSave();
-            }
-        };
-        menu.Items.Add(_autoStartMenuItem);
 
         menu.Items.Add(new Separator());
 
@@ -305,6 +240,27 @@ public partial class App : Application
         menu.Items.Add(exitItem);
 
         return menu;
+    }
+
+    /// <summary>
+    /// 設定ウィンドウを開く（二重起動防止付き）
+    /// </summary>
+    private void OpenSettingsWindow()
+    {
+        if (_noteManager == null || _hotkeyService == null || _persistence == null) return;
+
+        // 既に開いている場合はアクティブ化して前面に出す
+        if (_settingsWindow != null)
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+
+        _settingsWindow = new Views.SettingsWindow(_noteManager, _hotkeyService, _persistence);
+        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Show();
+
+        Log.Information("設定画面を開きました");
     }
 
     // ==========================================

@@ -1,0 +1,227 @@
+<Window x:Class="TopFusen.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dd="urn:gong-wpf-dragdrop"
+        Title="TopFusen — 設定"
+        Width="480" Height="520"
+        MinWidth="400" MinHeight="440"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResizeWithGrip"
+        Background="#FFF5F5F5">
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>     <!-- タブコンテンツ -->
+            <RowDefinition Height="Auto"/>  <!-- 閉じるボタン -->
+        </Grid.RowDefinitions>
+
+        <!-- ===== タブコントロール ===== -->
+        <TabControl x:Name="MainTabControl" Grid.Row="0">
+
+            <!-- ========== 一般タブ ========== -->
+            <TabItem Header="⚙ 一般">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
+                    <StackPanel>
+
+                        <!-- 自動起動 -->
+                        <TextBlock Text="起動" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="#FF333333" Margin="0,0,0,8"/>
+                        <CheckBox x:Name="AutoStartCheckBox"
+                                  Content="Windows 起動時に自動起動する"
+                                  FontSize="13"
+                                  Margin="4,0,0,16"
+                                  Checked="AutoStartCheckBox_Changed"
+                                  Unchecked="AutoStartCheckBox_Changed"/>
+
+                        <!-- ホットキー -->
+                        <TextBlock Text="ホットキー（編集モード切替）" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="#FF333333" Margin="0,0,0,8"/>
+                        <CheckBox x:Name="HotkeyEnabledCheckBox"
+                                  Content="ホットキーを有効にする"
+                                  FontSize="13"
+                                  Margin="4,0,0,8"
+                                  Checked="HotkeyEnabledCheckBox_Changed"
+                                  Unchecked="HotkeyEnabledCheckBox_Changed"/>
+
+                        <StackPanel x:Name="HotkeyPresetPanel" Orientation="Horizontal" Margin="4,0,0,4">
+                            <TextBlock Text="キーの組合せ:" FontSize="13"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ComboBox x:Name="HotkeyPresetComboBox"
+                                      Width="220" FontSize="13"
+                                      SelectionChanged="HotkeyPresetComboBox_Changed"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="HotkeyStatusText"
+                                   FontSize="11" Foreground="#FF888888"
+                                   Margin="4,4,0,0"/>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ========== フォントタブ ========== -->
+            <TabItem Header="🔤 フォント">
+                <Grid Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0"
+                               Text="付箋で使用可能なフォントの許可リスト"
+                               FontSize="14" FontWeight="SemiBold"
+                               Foreground="#FF333333" Margin="0,0,0,8"/>
+
+                    <Border Grid.Row="1" BorderBrush="#DDDDDD" BorderThickness="1"
+                            CornerRadius="4" Background="White">
+                        <ListBox x:Name="FontListBox"
+                                 BorderThickness="0" Background="Transparent"
+                                 FontSize="13"
+                                 HorizontalContentAlignment="Stretch"/>
+                    </Border>
+
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+                        <ComboBox x:Name="FontAddComboBox"
+                                  Width="240" FontSize="13"
+                                  IsEditable="True"/>
+                        <Button Content="追加" Width="60" Height="28"
+                                Margin="8,0,0,0"
+                                Click="FontAddButton_Click"/>
+                        <Button Content="削除" Width="60" Height="28"
+                                Margin="8,0,0,0"
+                                Click="FontRemoveButton_Click"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- ========== 付箋管理タブ ========== -->
+            <TabItem Header="📊 付箋管理">
+                <Grid Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0"
+                               Text="Z順管理（ドラッグで並び替え — 上が前面）"
+                               FontSize="14" FontWeight="SemiBold"
+                               Foreground="#FF333333" Margin="0,0,0,4"/>
+
+                    <TextBlock x:Name="ZOrderDesktopText" Grid.Row="1"
+                               FontSize="11" Foreground="#FF888888"
+                               Margin="0,0,0,8"/>
+
+                    <Border Grid.Row="2" BorderBrush="#DDDDDD" BorderThickness="1"
+                            CornerRadius="4" Background="White">
+                        <ListBox x:Name="ZOrderListBox"
+                                 BorderThickness="0" Background="Transparent"
+                                 HorizontalContentAlignment="Stretch"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 dd:DragDrop.IsDragSource="True"
+                                 dd:DragDrop.IsDropTarget="True"
+                                 dd:DragDrop.UseDefaultDragAdorner="True"
+                                 dd:DragDrop.UseDefaultEffectDataTemplate="True">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="2,4" Height="32">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0" Text="⠿"
+                                                   FontSize="16" Foreground="#AAAAAA"
+                                                   VerticalAlignment="Center"
+                                                   Margin="4,0,8,0" Cursor="SizeAll"/>
+
+                                        <Ellipse Grid.Column="1"
+                                                 Width="16" Height="16"
+                                                 Stroke="#CCCCCC" StrokeThickness="1"
+                                                 VerticalAlignment="Center" Margin="0,0,8,0">
+                                            <Ellipse.Fill>
+                                                <SolidColorBrush Color="{Binding BgColor}"/>
+                                            </Ellipse.Fill>
+                                        </Ellipse>
+
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding DisplayText}"
+                                                   FontSize="13" Foreground="#FF333333"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="0"/>
+                                    <Setter Property="Margin" Value="0,1"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                        </ListBox>
+                    </Border>
+
+                    <TextBlock x:Name="ZOrderNoteCountText" Grid.Row="3"
+                               FontSize="11" Foreground="#FF888888"
+                               Margin="0,8,0,0"/>
+                </Grid>
+            </TabItem>
+
+            <!-- ========== 詳細タブ ========== -->
+            <TabItem Header="🔧 詳細">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
+                    <StackPanel>
+
+                        <!-- ログ -->
+                        <TextBlock Text="ログ" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="#FF333333" Margin="0,0,0,8"/>
+                        <TextBlock Text="アプリの実行ログを確認できます。問題報告時に使用してください。"
+                                   FontSize="12" Foreground="#FF888888"
+                                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <Button Content="📂 ログフォルダを開く" Width="180" Height="30"
+                                HorizontalAlignment="Left"
+                                Click="OpenLogFolderButton_Click"
+                                Margin="0,0,0,20"/>
+
+                        <!-- 診断パッケージ -->
+                        <TextBlock Text="診断パッケージ" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="#FF333333" Margin="0,0,0,8"/>
+                        <TextBlock Text="ログ・設定・環境情報を zip にまとめて保存します。&#x0a;問題報告やサポートに使用できます。"
+                                   FontSize="12" Foreground="#FF888888"
+                                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <CheckBox x:Name="IncludeRtfCheckBox"
+                                  Content="付箋の本文（RTF）も含める"
+                                  FontSize="13"
+                                  Margin="0,0,0,8"/>
+                        <Button Content="📦 診断パッケージを作成" Width="200" Height="30"
+                                HorizontalAlignment="Left"
+                                Click="CreateDiagnosticButton_Click"/>
+                        <TextBlock x:Name="DiagnosticStatusText"
+                                   FontSize="11" Foreground="#FF888888"
+                                   Margin="0,8,0,20"/>
+
+                        <!-- バージョン情報 -->
+                        <TextBlock Text="バージョン情報" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="#FF333333" Margin="0,0,0,8"/>
+                        <TextBlock x:Name="VersionInfoText"
+                                   FontSize="12" Foreground="#FF888888"
+                                   TextWrapping="Wrap"/>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+        </TabControl>
+
+        <!-- ===== 閉じるボタン ===== -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="閉じる" Width="80" Height="28"
+                    Click="CloseButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
