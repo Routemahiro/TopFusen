@@ -293,18 +293,24 @@
 
 ---
 
-## Phase 4: リッチテキスト編集（FR-TEXT）
+## Phase 4: リッチテキスト編集（FR-TEXT） 🔧 作業中
 > 目標: 付箋内で文字単位の装飾ができる
+> 実装方針: **案B（バランス）** — P4-1〜P4-6 全タスクを一括実装
+> WPF EditingCommands 活用 + TextRange.ApplyPropertyValue() で装飾
 
-- [ ] P4-1: NoteWindow に WPF RichTextBox 配置
-  - 編集ON + 選択中のみ編集可能
-  - 編集OFF時は ReadOnly + 背景透過
+- [ ] P4-1: NoteWindow に WPF RichTextBox 配置 (作業中)
+  - TextBlock → RichTextBox に置き換え
+  - 編集ON + 選択中: IsReadOnly=false（編集可能）
+  - 編集ON + 未選択: IsReadOnly=true
+  - 編集OFF: IsReadOnly=true + 背景透過 + カーソル非表示
+  - RichTextBox のフォーカス管理（非干渉モードではフォーカスを奪わない）
 - [ ] P4-2: ツールバー実装（上部配置）
-  - 太字（Ctrl+B）
-  - 下線（Ctrl+U）
-  - 取り消し線
-  - 文字サイズ変更（ドロップダウン）
-  - 文字色変更（パレット）
+  - ドラッグハンドル「⠿」（左端、既存維持）
+  - 太字 `B`（Ctrl+B — EditingCommands.ToggleBold）
+  - 下線 `U`（Ctrl+U — EditingCommands.ToggleUnderline）
+  - 取り消し線 `S`（TextRange.ApplyPropertyValue で TextDecorations）
+  - 文字サイズ ComboBox（8, 10, 12, 14, 16, 18, 20, 24, 28, 36, 48）
+  - 文字色パレット Popup（黒/白 + カラーパレット）
 - [ ] P4-3: 適用ルール実装（FR-TEXT-4）
   - 選択範囲あり → 選択範囲に適用
   - 選択範囲なし → カーソル以後のトグル状態保持
