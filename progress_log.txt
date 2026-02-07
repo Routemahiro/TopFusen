@@ -477,3 +477,27 @@ App.xaml.cs 追加実装（Phase 5 連携）:
   - TopFusen/Views/NoteWindow.xaml.cs（RTF load/save + 変更追跡 + モデル同期）
   - TopFusen/Services/NoteManager.cs（SaveAll/LoadAll/RestoreNote + 永続化連携）
   - TopFusen/App.xaml.cs（DI登録 + LoadAll + FlushSave + 破損通知）
+
+==============================
+DJ-9: クリック透過を WM_NCHITTEST 単独制御に変更 — 2026-02-07
+==============================
+
+背景: Phase 5 実装後の実機テストで、WS_EX_TRANSPARENT + WS_EX_NOACTIVATE が
+仮想デスクトップ追跡を破壊する問題が再発。DJ-8 のワークアラウンド
+（生成時クリーン → Show() 後適用）では不十分だった。
+「生成後に付けても」OS は VD 追跡を停止する。
+
+[修正] SetClickThrough(): Win32 スタイル操作を完全除去
+  - 旧: WS_EX_TRANSPARENT + WS_EX_NOACTIVATE の ON/OFF + WM_NCHITTEST（三重制御）
+  - 新: _isClickThrough フラグ切替のみ → WM_NCHITTEST が唯一の制御手段
+  - ウィンドウスタイルを一切変更しないので VD 追跡が常に維持される
+
+[修正] OnSourceInitialized(): WS_EX_TRANSPARENT / WS_EX_NOACTIVATE の付与を除去
+  - 念のため WS_EX_TOOLWINDOW / WS_EX_TRANSPARENT / WS_EX_NOACTIVATE の除去処理は残す
+  - WM_NCHITTEST フックの登録はそのまま
+
+[ビルド検証] ✅ エラー0、警告0
+
+変更ファイル:
+  - TopFusen/Views/NoteWindow.xaml.cs（SetClickThrough 簡素化 + OnSourceInitialized 修正）
+  - TODO.md（DJ-9 設計判断追記）
