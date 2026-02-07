@@ -91,3 +91,6 @@ $RECYCLE.BIN/
 
 # Progress log (tracked separately)
 # progress_log.txt
+
+# Temporary commit message file (PowerShell Japanese encoding workaround)
+commit_msg.txt
