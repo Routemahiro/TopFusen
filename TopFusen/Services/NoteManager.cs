@@ -173,9 +173,14 @@ public class NoteManager
         _notes.Add((model, window));
         window.Show();
 
-        // DJ-7: Show() 後にクリック透過を適用（OS に通常ウィンドウとして認識させてから）
-        // Phase 8: MoveWindowToDesktop はこの前（Show() と SetClickThrough() の間）で行う
-        if (!IsEditMode)
+        // DJ-7/DJ-8: Show() 後に実際のモード状態を適用
+        // ウィンドウは「クリーン」で生まれ、OS に通常ウィンドウとして認識された後に状態を適用
+        // Phase 8: MoveWindowToDesktop はこの前（Show() と下記の間）で行う
+        if (IsEditMode)
+        {
+            window.SetInEditMode(true);
+        }
+        else
         {
             window.SetClickThrough(true);
         }
@@ -242,8 +247,12 @@ public class NoteManager
         _notes.Add((model, window));
         window.Show();
 
-        // DJ-7: Show() 後にクリック透過を適用
-        if (!IsEditMode)
+        // DJ-7/DJ-8: Show() 後に実際のモード状態を適用
+        if (IsEditMode)
+        {
+            window.SetInEditMode(true);
+        }
+        else
         {
             window.SetClickThrough(true);
         }

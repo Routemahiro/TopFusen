@@ -72,7 +72,9 @@ public partial class NoteWindow : Window
     {
         Model = model;
         _initialClickThrough = clickThrough;
-        IsInEditMode = !clickThrough;
+        // DJ-8: 常に編集OFF（UI非表示）で起動する安全な初期状態
+        // 実際の編集モードは NoteManager が Show() 後に SetInEditMode() で設定する
+        IsInEditMode = false;
 
         InitializeComponent();
 
