@@ -561,3 +561,31 @@ DJ-10 方針: WS_EX_TRANSPARENT + DWMWA_CLOAK + DispatcherTimer ポーリング
   - TopFusen/Services/NoteManager.cs（VD統合: DesktopId付与/Cloak/HandleDesktopSwitch）
   - TopFusen/App.xaml.cs（Tracker初期化 + 監視開始 + DesktopChanged + デバッグメニュー）
   - TODO.md（DJ-10 + Phase 8.0 追加）
+
+--- 2026-02-07 Phase 8.0 Spike 検証完了 + バグ修正 ---
+
+[Fix1] 起動順序バグ修正
+  - 問題: App.xaml.cs で VirtualDesktopService 初期化が LoadAll() より後だった
+  - 原因: RestoreNote 内の VD Cloak 処理が、サービス未初期化のため機能しなかった
+  - 修正: Initialize() + InitializeTracker() を LoadAll() より前に移動
+  - 結果: 起動直後から正しい VD に付箋が配置されるように
+
+[Fix2] 編集ON中VD切替で1枚しか表示されないバグ修正
+  - 問題: 編集ON時に WS_EX_TRANSPARENT を全付箋から除去していたため、
+          OS のネイティブ VD 追跡が干渉
+  - 修正: SetEditMode / HandleDesktopSwitch で、
+          現在VDの付箋のみ WS_EX_TRANSPARENT 除去、
+          他VDの付箋は WS_EX_TRANSPARENT 維持 + Cloak 維持
+  - 結果: 編集ON中のVD切替でも正しく分離
+
+[P8.0-VERIFY 実機検証結果] ★ 全項目パス
+  1. DWMWA_CLOAK で付箋が隠れる/再表示 ... OK
+  2. VD Tracker で現在デスクトップ ID 取得 ... OK
+  3. クリック透過（クロスプロセス）復活 ... OK
+  4. デスクトップ切替で正しい付箋のみ表示 ... OK
+  5. Uncloak 後 Topmost 維持 ... OK
+  6. 再起動後 DesktopId 復元 + 正しい VD 配置 ... OK
+  7. 編集ON中の VD 切替でも正しく分離 ... OK（Fix2 後）
+  8. 起動直後から正しい VD に配置 ... OK（Fix1 後）
+
+Phase 8.0 スパイク: 技術的実現性を確認。DJ-10 方式の有効性が実証された。
