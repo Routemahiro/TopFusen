@@ -480,13 +480,23 @@ public class NoteManager
         // 重なり検知 + ずらし（既存付箋と完全重複を避ける）
         ApplyOverlapOffset(model, workArea);
 
-        // Phase 8: 現在のデスクトップ ID を付与
+        // Phase 8 + Phase 13 BUG 3 修正: 現在のデスクトップ ID を付与（フォールバック付き）
         if (_vdService.IsAvailable)
         {
             var desktopId = _vdService.GetCurrentDesktopIdFast();
+            if (!desktopId.HasValue)
+            {
+                // Phase 13: 高速パスが null → 重量級の短命ウィンドウ方式にフォールバック
+                Log.Warning("GetCurrentDesktopIdFast が null — GetCurrentDesktopId にフォールバック");
+                desktopId = _vdService.GetCurrentDesktopId();
+            }
             if (desktopId.HasValue)
             {
                 model.DesktopId = desktopId.Value;
+            }
+            else
+            {
+                Log.Warning("CreateNote: DesktopId を取得できません（Guid.Empty のまま = 全VD表示）");
             }
         }
 
@@ -579,6 +589,9 @@ public class NoteManager
         // 位置を +24px ずらし
         model.Placement.DipX = source.Model.Placement.DipX + 24;
         model.Placement.DipY = source.Model.Placement.DipY + 24;
+
+        // Phase 13: BUG 1 修正 — DesktopId を複製元からコピー（未コピーだと Guid.Empty → 全VD表示バグ）
+        model.DesktopId = source.Model.DesktopId;
 
         // スタイルをコピー
         model.Style = new NoteStyle
@@ -739,31 +752,11 @@ public class NoteManager
             return;
         }
 
-        // P8-6: VD 切替時に孤立付箋をリアルタイム救済
-        //  （VD が削除された直後の切替イベントで検知して、即座に現在VDに付替える）
-        var orphanedIds = _vdService.FindOrphanedDesktopIds(
-            _notes.Where(n => n.Model.DesktopId != Guid.Empty)
-                  .Select(n => n.Model.DesktopId)
-                  .Distinct());
-
-        var rescuedCount = 0;
-        if (orphanedIds.Count > 0)
-        {
-            foreach (var (model, _) in _notes)
-            {
-                if (orphanedIds.Contains(model.DesktopId))
-                {
-                    Log.Information("P8-6 リアルタイム救済: {NoteId} (旧VD={OldId} → 現在VD={NewId})",
-                        model.NoteId, model.DesktopId, currentDesktopId);
-                    model.DesktopId = currentDesktopId;
-                    rescuedCount++;
-                }
-            }
-            if (rescuedCount > 0)
-            {
-                _persistence.ScheduleSave();
-            }
-        }
+        // Phase 13: BUG 2 修正 — リアルタイム孤立判定を削除
+        // VD 切替のたびに Registry を読んで孤立判定すると、Registry の一時的な不整合で
+        // 他デスクトップの付箋が誤って現在VDに引っ張られるリスクがある。
+        // 孤立救済は起動時の RescueOrphanedNotes() のみに限定する。
+        // （後回し.md §1: 「リアルタイム救済は動作しない」記載済み）
 
         // 通常の Cloak/Uncloak 処理
         var cloakCount = 0;
@@ -818,8 +811,8 @@ public class NoteManager
         // Phase 9: 切替先デスクトップの Z順を適用
         ApplyZOrder(currentDesktopId);
 
-        Log.Information("デスクトップ切替処理: VD={DesktopId}, 表示={Uncloak}, 非表示={Cloak}, 救済={Rescued}, EditMode={EditMode}",
-            currentDesktopId, uncloakCount, cloakCount, rescuedCount, IsEditMode);
+        Log.Information("デスクトップ切替処理: VD={DesktopId}, 表示={Uncloak}, 非表示={Cloak}, EditMode={EditMode}",
+            currentDesktopId, uncloakCount, cloakCount, IsEditMode);
     }
 
     // ==========================================
