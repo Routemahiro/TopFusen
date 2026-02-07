@@ -75,6 +75,11 @@ public partial class NoteWindow : Window
     private static readonly SolidColorBrush ToolbarActiveBg = new(Color.FromArgb(60, 0, 0, 0));
     /// <summary>ツールバー状態更新中フラグ（フィードバックループ防止）</summary>
     private bool _isUpdatingToolbar;
+    /// <summary>
+    /// 保留中の書式（空選択でツールバー操作時、次の入力に適用する書式）
+    /// WPF の springloaded formatting がボタンクリック時に維持されない問題への対策
+    /// </summary>
+    private readonly Dictionary<DependencyProperty, object> _pendingFormat = new();
 
     /// <summary>
     /// 付箋ウィンドウを生成する
@@ -321,24 +326,125 @@ public partial class NoteWindow : Window
         }
         FontSizeCombo.SelectedItem = 14;
 
-        // RichTextBox の選択変更でツールバー状態を更新
+        // RichTextBox イベント登録
         NoteRichTextBox.SelectionChanged += NoteRichTextBox_SelectionChanged;
+        NoteRichTextBox.PreviewTextInput += NoteRichTextBox_PreviewTextInput;
+        NoteRichTextBox.PreviewKeyDown += NoteRichTextBox_PreviewKeyDown;
 
         // Phase 4 P4-6: 貼り付け時のフォント正規化
         DataObject.AddPastingHandler(NoteRichTextBox, OnPasting);
     }
 
+    // --- 保留書式のヘルパー ---
+
     /// <summary>
-    /// RichTextBox の選択が変更された時にツールバーの状態を更新する
+    /// 現在有効な TextDecorations を取得する（保留書式 > 選択位置の書式）
+    /// </summary>
+    private TextDecorationCollection? GetEffectiveTextDecorations()
+    {
+        if (_pendingFormat.TryGetValue(Inline.TextDecorationsProperty, out var pd))
+            return pd as TextDecorationCollection;
+        return NoteRichTextBox.Selection.GetPropertyValue(Inline.TextDecorationsProperty)
+            as TextDecorationCollection;
+    }
+
+    /// <summary>
+    /// カーソル位置の現在の書式を Run にコピーする（保留書式の Run 作成用）
+    /// </summary>
+    private void CopyCurrentFormattingToRun(Run run)
+    {
+        var sel = NoteRichTextBox.Selection;
+
+        var weight = sel.GetPropertyValue(TextElement.FontWeightProperty);
+        if (weight is FontWeight fw) run.FontWeight = fw;
+
+        var decos = sel.GetPropertyValue(Inline.TextDecorationsProperty);
+        if (decos is TextDecorationCollection td)
+            run.TextDecorations = new TextDecorationCollection(td);
+
+        var size = sel.GetPropertyValue(TextElement.FontSizeProperty);
+        if (size is double fs) run.FontSize = fs;
+
+        var fg = sel.GetPropertyValue(TextElement.ForegroundProperty);
+        if (fg is SolidColorBrush brush)
+        {
+            var clone = new SolidColorBrush(brush.Color);
+            clone.Freeze();
+            run.Foreground = clone;
+        }
+
+        // フォントは付箋単位なので Model から取得
+        run.FontFamily = new FontFamily(Model.Style.FontFamilyName);
+    }
+
+    // --- 選択変更 + テキスト入力フック ---
+
+    /// <summary>
+    /// RichTextBox の選択が変更された時（カーソル移動含む）
+    /// 保留書式をクリアし、ツールバー状態を更新する
     /// </summary>
     private void NoteRichTextBox_SelectionChanged(object sender, RoutedEventArgs e)
     {
         if (!IsInEditMode || !IsSelected) return;
+        _pendingFormat.Clear();
         UpdateToolbarState();
     }
 
     /// <summary>
-    /// ツールバーのボタン状態を現在の選択範囲に合わせて更新する
+    /// テキスト入力前フック — 保留書式がある場合、書式付き Run を挿入する
+    /// WPF の springloaded formatting がツールバーボタンクリック時に維持されない問題への対策。
+    /// 最初の1文字を書式付き Run として挿入し、以降の入力はその Run の書式を自動引き継ぎする。
+    /// </summary>
+    private void NoteRichTextBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        if (_pendingFormat.Count == 0) return;
+
+        e.Handled = true;
+
+        // カーソル位置に書式付き Run を挿入
+        var pos = NoteRichTextBox.CaretPosition;
+        var run = new Run(e.Text, pos);
+
+        // カーソル位置の現在の書式を Run にコピー
+        CopyCurrentFormattingToRun(run);
+
+        // 保留書式で上書き
+        foreach (var kvp in _pendingFormat)
+        {
+            run.SetValue(kvp.Key, kvp.Value);
+        }
+
+        // カーソルを Run の末尾に移動（以降の入力は Run の書式を自動引き継ぎ）
+        NoteRichTextBox.CaretPosition = run.ContentEnd;
+
+        // 保留書式クリア
+        _pendingFormat.Clear();
+    }
+
+    /// <summary>
+    /// キーダウン前フック — Ctrl+B/U をカスタム処理に統一する
+    /// （WPF 標準の EditingCommands でも空選択時の書式引き継ぎが不安定なため）
+    /// </summary>
+    private void NoteRichTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.Control) return;
+
+        if (e.Key == Key.B)
+        {
+            e.Handled = true;
+            BoldButton_Click(this, new RoutedEventArgs());
+        }
+        else if (e.Key == Key.U)
+        {
+            e.Handled = true;
+            UnderlineButton_Click(this, new RoutedEventArgs());
+        }
+    }
+
+    // --- ツールバー状態更新 ---
+
+    /// <summary>
+    /// ツールバーのボタン状態を現在の選択範囲（+ 保留書式）に合わせて更新する
     /// </summary>
     private void UpdateToolbarState()
     {
@@ -348,39 +454,63 @@ public partial class NoteWindow : Window
             var selection = NoteRichTextBox.Selection;
 
             // --- 太字 ---
-            var fontWeight = selection.GetPropertyValue(TextElement.FontWeightProperty);
-            SetToolbarButtonActive(BoldButton,
-                fontWeight is FontWeight fw && fw == FontWeights.Bold);
+            bool isBold;
+            if (_pendingFormat.TryGetValue(TextElement.FontWeightProperty, out var pw))
+            {
+                isBold = pw is FontWeight fwp && fwp == FontWeights.Bold;
+            }
+            else
+            {
+                var fontWeight = selection.GetPropertyValue(TextElement.FontWeightProperty);
+                isBold = fontWeight is FontWeight fw && fw == FontWeights.Bold;
+            }
+            SetToolbarButtonActive(BoldButton, isBold);
 
             // --- 下線・取り消し線 ---
-            var textDeco = selection.GetPropertyValue(Inline.TextDecorationsProperty);
-            bool hasUnderline = false;
-            bool hasStrikethrough = false;
-            if (textDeco is TextDecorationCollection decos)
+            TextDecorationCollection? effectiveDecos;
+            if (_pendingFormat.TryGetValue(Inline.TextDecorationsProperty, out var pd))
             {
-                hasUnderline = decos.Any(d => d.Location == TextDecorationLocation.Underline);
-                hasStrikethrough = decos.Any(d => d.Location == TextDecorationLocation.Strikethrough);
+                effectiveDecos = pd as TextDecorationCollection;
             }
+            else
+            {
+                effectiveDecos = selection.GetPropertyValue(Inline.TextDecorationsProperty)
+                    as TextDecorationCollection;
+            }
+            bool hasUnderline = effectiveDecos?.Any(d => d.Location == TextDecorationLocation.Underline) ?? false;
+            bool hasStrikethrough = effectiveDecos?.Any(d => d.Location == TextDecorationLocation.Strikethrough) ?? false;
             SetToolbarButtonActive(UnderlineButton, hasUnderline);
             SetToolbarButtonActive(StrikethroughButton, hasStrikethrough);
 
             // --- 文字サイズ ---
-            var fontSize = selection.GetPropertyValue(TextElement.FontSizeProperty);
-            if (fontSize is double size)
+            if (_pendingFormat.TryGetValue(TextElement.FontSizeProperty, out var ps))
             {
-                var intSize = (int)Math.Round(size);
+                var intSize = (int)Math.Round((double)ps);
                 FontSizeCombo.SelectedItem = FontSizePresets.Contains(intSize) ? (object)intSize : null;
             }
             else
             {
-                FontSizeCombo.SelectedItem = null;
+                var fontSize = selection.GetPropertyValue(TextElement.FontSizeProperty);
+                if (fontSize is double size)
+                {
+                    var intSize = (int)Math.Round(size);
+                    FontSizeCombo.SelectedItem = FontSizePresets.Contains(intSize) ? (object)intSize : null;
+                }
+                else
+                {
+                    FontSizeCombo.SelectedItem = null;
+                }
             }
 
             // --- 文字色インジケータ ---
-            var foreground = selection.GetPropertyValue(TextElement.ForegroundProperty);
-            if (foreground is SolidColorBrush brush)
+            if (_pendingFormat.TryGetValue(TextElement.ForegroundProperty, out var pf))
             {
-                TextColorIndicator.Fill = brush;
+                if (pf is SolidColorBrush b) TextColorIndicator.Fill = b;
+            }
+            else
+            {
+                var foreground = selection.GetPropertyValue(TextElement.ForegroundProperty);
+                if (foreground is SolidColorBrush brush) TextColorIndicator.Fill = brush;
             }
         }
         finally
@@ -399,31 +529,96 @@ public partial class NoteWindow : Window
 
     // --- 装飾ボタン Click ハンドラ ---
 
-    /// <summary>太字トグル（Ctrl+B と同等）</summary>
+    /// <summary>太字トグル（ツールバーボタン / Ctrl+B 共通）</summary>
     private void BoldButton_Click(object sender, RoutedEventArgs e)
     {
-        EditingCommands.ToggleBold.Execute(null, NoteRichTextBox);
+        var selection = NoteRichTextBox.Selection;
+        if (!selection.IsEmpty)
+        {
+            // 選択範囲あり → 直接適用
+            EditingCommands.ToggleBold.Execute(null, NoteRichTextBox);
+        }
+        else
+        {
+            // 空選択 → 保留書式でトグル
+            bool isBold;
+            if (_pendingFormat.TryGetValue(TextElement.FontWeightProperty, out var pw))
+                isBold = pw is FontWeight fwp && fwp == FontWeights.Bold;
+            else
+            {
+                var weight = selection.GetPropertyValue(TextElement.FontWeightProperty);
+                isBold = weight is FontWeight fw && fw == FontWeights.Bold;
+            }
+            _pendingFormat[TextElement.FontWeightProperty] =
+                isBold ? FontWeights.Normal : FontWeights.Bold;
+        }
+        UpdateToolbarState();
         NoteRichTextBox.Focus();
     }
 
-    /// <summary>下線トグル（Ctrl+U と同等）</summary>
+    /// <summary>下線トグル（ツールバーボタン / Ctrl+U 共通）</summary>
     private void UnderlineButton_Click(object sender, RoutedEventArgs e)
     {
-        EditingCommands.ToggleUnderline.Execute(null, NoteRichTextBox);
+        var selection = NoteRichTextBox.Selection;
+        if (!selection.IsEmpty)
+        {
+            EditingCommands.ToggleUnderline.Execute(null, NoteRichTextBox);
+        }
+        else
+        {
+            var currentDecos = GetEffectiveTextDecorations();
+            bool hasUnderline = currentDecos?.Any(d => d.Location == TextDecorationLocation.Underline) ?? false;
+            var newDecos = currentDecos != null
+                ? new TextDecorationCollection(currentDecos) : new TextDecorationCollection();
+            if (hasUnderline)
+            {
+                foreach (var d in newDecos.Where(d => d.Location == TextDecorationLocation.Underline).ToList())
+                    newDecos.Remove(d);
+            }
+            else
+            {
+                newDecos.Add(TextDecorations.Underline[0]);
+            }
+            _pendingFormat[Inline.TextDecorationsProperty] = newDecos;
+        }
+        UpdateToolbarState();
         NoteRichTextBox.Focus();
     }
 
     /// <summary>取り消し線トグル（手動実装 — EditingCommands にないため）</summary>
     private void StrikethroughButton_Click(object sender, RoutedEventArgs e)
     {
-        ToggleStrikethrough();
+        var selection = NoteRichTextBox.Selection;
+        if (!selection.IsEmpty)
+        {
+            // 選択範囲あり → 直接トグル
+            ToggleStrikethrough();
+        }
+        else
+        {
+            // 空選択 → 保留書式でトグル
+            var currentDecos = GetEffectiveTextDecorations();
+            bool hasStrike = currentDecos?.Any(d => d.Location == TextDecorationLocation.Strikethrough) ?? false;
+            var newDecos = currentDecos != null
+                ? new TextDecorationCollection(currentDecos) : new TextDecorationCollection();
+            if (hasStrike)
+            {
+                foreach (var d in newDecos.Where(d => d.Location == TextDecorationLocation.Strikethrough).ToList())
+                    newDecos.Remove(d);
+            }
+            else
+            {
+                newDecos.Add(TextDecorations.Strikethrough[0]);
+            }
+            _pendingFormat[Inline.TextDecorationsProperty] = newDecos;
+        }
+        UpdateToolbarState();
         NoteRichTextBox.Focus();
     }
 
     /// <summary>
-    /// 取り消し線のトグル処理
-    /// 選択範囲の TextDecorations から Strikethrough を追加/除去する
-    /// ※ 選択範囲が混在装飾の場合、既存の他の装飾が失われる可能性あり（v0.2 許容）
+    /// 取り消し線のトグル処理（選択範囲ありの場合のみ使用）
+    /// ※ 混在装飾で他の装飾が失われる可能性あり（v0.2 許容）
     /// </summary>
     private void ToggleStrikethrough()
     {
@@ -437,13 +632,11 @@ public partial class NoteWindow : Window
         TextDecorationCollection newDecorations;
         if (hasStrikethrough)
         {
-            // 取り消し線を除去（他の装飾は保持）
             newDecorations = new TextDecorationCollection(
                 currentDecorations!.Where(d => d.Location != TextDecorationLocation.Strikethrough));
         }
         else
         {
-            // 取り消し線を追加（他の装飾は保持）
             newDecorations = currentDecorations != null
                 ? new TextDecorationCollection(currentDecorations)
                 : new TextDecorationCollection();
@@ -461,7 +654,16 @@ public partial class NoteWindow : Window
         if (_isUpdatingToolbar) return;
         if (FontSizeCombo.SelectedItem is int size)
         {
-            NoteRichTextBox.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, (double)size);
+            var selection = NoteRichTextBox.Selection;
+            if (!selection.IsEmpty)
+            {
+                selection.ApplyPropertyValue(TextElement.FontSizeProperty, (double)size);
+            }
+            else
+            {
+                _pendingFormat[TextElement.FontSizeProperty] = (double)size;
+            }
+            UpdateToolbarState();
             NoteRichTextBox.Focus();
         }
     }
@@ -488,9 +690,20 @@ public partial class NoteWindow : Window
             var color = (Color)ColorConverter.ConvertFromString(colorStr);
             var brush = new SolidColorBrush(color);
             brush.Freeze();
-            NoteRichTextBox.Selection.ApplyPropertyValue(TextElement.ForegroundProperty, brush);
+
+            var selection = NoteRichTextBox.Selection;
+            if (!selection.IsEmpty)
+            {
+                selection.ApplyPropertyValue(TextElement.ForegroundProperty, brush);
+            }
+            else
+            {
+                _pendingFormat[TextElement.ForegroundProperty] = brush;
+            }
+
             TextColorIndicator.Fill = brush;
             TextColorPopup.IsOpen = false;
+            UpdateToolbarState();
             NoteRichTextBox.Focus();
         }
     }
@@ -499,13 +712,9 @@ public partial class NoteWindow : Window
 
     /// <summary>
     /// 貼り付け時のフォント正規化（FR-TEXT-6 / FR-FONT）
-    /// WPF RichTextBox はリッチテキストを優先して貼り付け、無理ならプレーンにフォールバックする（標準動作）。
-    /// 貼り付け後、ドキュメント全体のフォントを付箋フォントに正規化する。
-    /// PRD: 「フォントは付箋単位」「貼り付けで異なるフォントが入ってきた場合は付箋フォントに正規化」
     /// </summary>
     private void OnPasting(object sender, DataObjectPastingEventArgs e)
     {
-        // Dispatcher.BeginInvoke で貼り付け処理完了後にフォント正規化を実行する
         Dispatcher.BeginInvoke(
             System.Windows.Threading.DispatcherPriority.Background,
             new Action(NormalizePastedFont));
