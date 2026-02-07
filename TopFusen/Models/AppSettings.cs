@@ -8,8 +8,16 @@ public class AppSettings
     /// <summary>付箋の一時非表示状態（永続化される）</summary>
     public bool IsHidden { get; set; }
 
-    /// <summary>ホットキー設定</summary>
+    /// <summary>ホットキー設定（編集モード切替）</summary>
     public HotkeySettings Hotkey { get; set; } = new();
+
+    /// <summary>ホットキー設定（非表示/表示切替）— Phase 14 追加</summary>
+    public HotkeySettings HideHotkey { get; set; } = new()
+    {
+        Enabled = false,
+        Modifiers = 0x0007, // MOD_ALT | MOD_CONTROL | MOD_SHIFT
+        Key = 0x48,         // 'H'
+    };
 
     /// <summary>フォント許可リスト</summary>
     public List<string> FontAllowList { get; set; } = new()

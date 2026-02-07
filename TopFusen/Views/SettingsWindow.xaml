@@ -53,6 +53,28 @@
 
                         <TextBlock x:Name="HotkeyStatusText"
                                    FontSize="11" Foreground="#FF888888"
+                                   Margin="4,4,0,20"/>
+
+                        <!-- Phase 14: 非表示ホットキー -->
+                        <TextBlock Text="ホットキー（非表示/表示切替）" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="#FF333333" Margin="0,0,0,8"/>
+                        <CheckBox x:Name="HideHotkeyEnabledCheckBox"
+                                  Content="ホットキーを有効にする"
+                                  FontSize="13"
+                                  Margin="4,0,0,8"
+                                  Checked="HideHotkeyEnabledCheckBox_Changed"
+                                  Unchecked="HideHotkeyEnabledCheckBox_Changed"/>
+
+                        <StackPanel x:Name="HideHotkeyPresetPanel" Orientation="Horizontal" Margin="4,0,0,4">
+                            <TextBlock Text="キーの組合せ:" FontSize="13"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ComboBox x:Name="HideHotkeyPresetComboBox"
+                                      Width="220" FontSize="13"
+                                      SelectionChanged="HideHotkeyPresetComboBox_Changed"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="HideHotkeyStatusText"
+                                   FontSize="11" Foreground="#FF888888"
                                    Margin="4,4,0,0"/>
 
                     </StackPanel>
@@ -106,7 +128,7 @@
                     </Grid.RowDefinitions>
 
                     <TextBlock Grid.Row="0"
-                               Text="Z順管理（ドラッグで並び替え — 上が前面）"
+                               Text="並び順管理（ドラッグで並び替え — 上が前面）"
                                FontSize="14" FontWeight="SemiBold"
                                Foreground="#FF333333" Margin="0,0,0,4"/>
 
@@ -131,6 +153,7 @@
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
 
                                         <TextBlock Grid.Column="0" Text="⠿"
@@ -152,6 +175,18 @@
                                                    FontSize="13" Foreground="#FF333333"
                                                    VerticalAlignment="Center"
                                                    TextTrimming="CharacterEllipsis"/>
+
+                                        <Button Grid.Column="3"
+                                                Content="🗑" FontSize="14"
+                                                Width="28" Height="28"
+                                                VerticalAlignment="Center"
+                                                Margin="4,0,2,0"
+                                                ToolTip="この付箋を削除"
+                                                Tag="{Binding NoteId}"
+                                                Click="DeleteNoteButton_Click"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Cursor="Hand"/>
                                     </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>

@@ -123,15 +123,22 @@ public partial class App : Application
             UpdateTrayIconAppearance(true);
         }
 
-        // 13. Phase 10: ホットキーサービス初期化
+        // 13. Phase 10: ホットキーサービス初期化（Phase 14: 非表示ホットキー追加）
         _hotkeyService = new HotkeyService();
         _hotkeyService.HotkeyPressed += OnHotkeyPressed;
-        _hotkeyService.Initialize(_noteManager.OwnerHandle, _noteManager.AppSettings.Hotkey);
+        _hotkeyService.HideHotkeyPressed += OnHideHotkeyPressed;
+        _hotkeyService.Initialize(
+            _noteManager.OwnerHandle,
+            _noteManager.AppSettings.Hotkey,
+            _noteManager.AppSettings.HideHotkey);
 
         if (_hotkeyService.LastError != null)
         {
-            Log.Warning("ホットキー登録エラー: {Error}", _hotkeyService.LastError);
-            // Phase 11: エラー詳細は設定画面で確認可能
+            Log.Warning("ホットキー登録エラー（編集）: {Error}", _hotkeyService.LastError);
+        }
+        if (_hotkeyService.HideLastError != null)
+        {
+            Log.Warning("ホットキー登録エラー（非表示）: {Error}", _hotkeyService.HideLastError);
         }
 
         Log.Information("アプリケーション起動完了（Phase 10: トレイ常駐 + モード切替 + 永続化 + VD自前管理 + 非表示/ホットキー/自動起動）");
@@ -190,18 +197,7 @@ public partial class App : Application
         {
             Header = isHidden ? "👁 付箋を再表示" : "👁 一時的に非表示"
         };
-        _hideMenuItem.Click += (_, _) =>
-        {
-            if (_noteManager == null) return;
-            var newHidden = !_noteManager.IsHidden;
-            _noteManager.SetHidden(newHidden);
-            _hideMenuItem.Header = newHidden ? "👁 付箋を再表示" : "👁 一時的に非表示";
-            if (newHidden)
-            {
-                _editModeMenuItem!.Header = "✏️ 編集モード: OFF";
-            }
-            UpdateTrayIconAppearance(newHidden);
-        };
+        _hideMenuItem.Click += (_, _) => ToggleHidden();
         menu.Items.Add(_hideMenuItem);
 
         // --- 設定を開く（FR-TRAY-4）--- Phase 11 実装
@@ -290,11 +286,40 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// ホットキー押下ハンドラ
+    /// 編集モードホットキー押下ハンドラ
     /// </summary>
     private void OnHotkeyPressed()
     {
         Dispatcher.Invoke(ToggleEditMode);
+    }
+
+    /// <summary>
+    /// 非表示ホットキー押下ハンドラ（Phase 14）
+    /// </summary>
+    private void OnHideHotkeyPressed()
+    {
+        Dispatcher.Invoke(ToggleHidden);
+    }
+
+    /// <summary>
+    /// 非表示をトグルする（トレイメニュー + ホットキー共通）
+    /// </summary>
+    private void ToggleHidden()
+    {
+        if (_noteManager == null) return;
+
+        var newHidden = !_noteManager.IsHidden;
+        _noteManager.SetHidden(newHidden);
+
+        if (_hideMenuItem != null)
+        {
+            _hideMenuItem.Header = newHidden ? "👁 付箋を再表示" : "👁 一時的に非表示";
+        }
+        if (newHidden && _editModeMenuItem != null)
+        {
+            _editModeMenuItem.Header = "✏️ 編集モード: OFF";
+        }
+        UpdateTrayIconAppearance(newHidden);
     }
 
     // ==========================================

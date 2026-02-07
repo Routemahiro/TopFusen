@@ -38,6 +38,16 @@ public partial class SettingsWindow : Window
         new HotkeyPreset("Ctrl+Shift+F9",     0x0006, 0x78),  // MOD_CTRL|SHIFT + F9
     };
 
+    /// <summary>Phase 14: 非表示ホットキーのプリセット</summary>
+    private static readonly HotkeyPreset[] _hidePresets = new[]
+    {
+        new HotkeyPreset("Ctrl+Shift+Alt+H",  0x0007, 0x48),  // MOD_ALT|CTRL|SHIFT + H
+        new HotkeyPreset("Ctrl+Shift+F11",    0x0006, 0x7A),  // MOD_CTRL|SHIFT + F11
+        new HotkeyPreset("Ctrl+Alt+F10",      0x0003, 0x79),  // MOD_ALT|CTRL + F10
+        new HotkeyPreset("Ctrl+Win+H",        0x000A, 0x48),  // MOD_CTRL|WIN + H
+        new HotkeyPreset("Ctrl+Shift+F8",     0x0006, 0x77),  // MOD_CTRL|SHIFT + F8
+    };
+
     // ==========================================
     //  Z順管理用（ZOrderWindow と同等）
     // ==========================================
@@ -89,20 +99,35 @@ public partial class SettingsWindow : Window
         }
 
         // 現在の設定に合うプリセットを選択
-        var currentIndex = FindPresetIndex(hotkey.Modifiers, hotkey.Key);
+        var currentIndex = FindPresetIndex(_presets, hotkey.Modifiers, hotkey.Key);
         HotkeyPresetComboBox.SelectedIndex = currentIndex >= 0 ? currentIndex : 0;
 
         // ホットキー無効時はプリセットパネルを非表示
         HotkeyPresetPanel.IsEnabled = hotkey.Enabled;
 
         UpdateHotkeyStatusText();
+
+        // Phase 14: 非表示ホットキー
+        var hideHotkey = _noteManager.AppSettings.HideHotkey;
+        HideHotkeyEnabledCheckBox.IsChecked = hideHotkey.Enabled;
+
+        foreach (var preset in _hidePresets)
+        {
+            HideHotkeyPresetComboBox.Items.Add(preset.Label);
+        }
+
+        var hideIndex = FindPresetIndex(_hidePresets, hideHotkey.Modifiers, hideHotkey.Key);
+        HideHotkeyPresetComboBox.SelectedIndex = hideIndex >= 0 ? hideIndex : 0;
+        HideHotkeyPresetPanel.IsEnabled = hideHotkey.Enabled;
+
+        UpdateHideHotkeyStatusText();
     }
 
-    private static int FindPresetIndex(int modifiers, int key)
+    private static int FindPresetIndex(HotkeyPreset[] presets, int modifiers, int key)
     {
-        for (int i = 0; i < _presets.Length; i++)
+        for (int i = 0; i < presets.Length; i++)
         {
-            if (_presets[i].Modifiers == modifiers && _presets[i].Key == key)
+            if (presets[i].Modifiers == modifiers && presets[i].Key == key)
                 return i;
         }
         return -1;
@@ -176,7 +201,64 @@ public partial class SettingsWindow : Window
 
         _persistence.ScheduleSave();
         UpdateHotkeyStatusText();
-        Log.Information("設定画面: ホットキープリセット変更 → {Label}", preset.Label);
+        Log.Information("設定画面: ホットキープリセット変更（編集）→ {Label}", preset.Label);
+    }
+
+    // ==========================================
+    //  Phase 14: 非表示ホットキー
+    // ==========================================
+
+    private void UpdateHideHotkeyStatusText()
+    {
+        if (!_hotkeyService.IsHideRegistered && _noteManager.AppSettings.HideHotkey.Enabled)
+        {
+            HideHotkeyStatusText.Text = _hotkeyService.HideLastError ?? "非表示ホットキー登録に失敗しました";
+            HideHotkeyStatusText.Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0x33, 0x33));
+        }
+        else if (_noteManager.AppSettings.HideHotkey.Enabled)
+        {
+            HideHotkeyStatusText.Text = "✓ 非表示ホットキーは正常に登録されています";
+            HideHotkeyStatusText.Foreground = new SolidColorBrush(Color.FromRgb(0x33, 0x99, 0x33));
+        }
+        else
+        {
+            HideHotkeyStatusText.Text = "非表示ホットキーは無効です";
+            HideHotkeyStatusText.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
+        }
+    }
+
+    private void HideHotkeyEnabledCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing) return;
+
+        var enabled = HideHotkeyEnabledCheckBox.IsChecked == true;
+        _noteManager.AppSettings.HideHotkey.Enabled = enabled;
+        _hotkeyService.UpdateHideSettings(_noteManager.AppSettings.HideHotkey);
+        HideHotkeyPresetPanel.IsEnabled = enabled;
+        _persistence.ScheduleSave();
+        UpdateHideHotkeyStatusText();
+        Log.Information("設定画面: 非表示ホットキー有効 = {Enabled}", enabled);
+    }
+
+    private void HideHotkeyPresetComboBox_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_isInitializing) return;
+
+        var idx = HideHotkeyPresetComboBox.SelectedIndex;
+        if (idx < 0 || idx >= _hidePresets.Length) return;
+
+        var preset = _hidePresets[idx];
+        _noteManager.AppSettings.HideHotkey.Modifiers = preset.Modifiers;
+        _noteManager.AppSettings.HideHotkey.Key = preset.Key;
+
+        if (_noteManager.AppSettings.HideHotkey.Enabled)
+        {
+            _hotkeyService.UpdateHideSettings(_noteManager.AppSettings.HideHotkey);
+        }
+
+        _persistence.ScheduleSave();
+        UpdateHideHotkeyStatusText();
+        Log.Information("設定画面: ホットキープリセット変更（非表示）→ {Label}", preset.Label);
     }
 
     // ==========================================
@@ -317,7 +399,31 @@ public partial class SettingsWindow : Window
 
         var orderedIds = _zOrderItems.Select(item => item.NoteId).ToList();
         _noteManager.UpdateZOrder(_desktopId, orderedIds);
-        Log.Information("設定画面: Z順更新 ({Count}枚)", orderedIds.Count);
+        Log.Information("設定画面: 並び順更新 ({Count}枚)", orderedIds.Count);
+    }
+
+    /// <summary>
+    /// 付箋管理タブの削除ボタン（Phase 14: P14-2）
+    /// </summary>
+    private void DeleteNoteButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button btn) return;
+        if (btn.Tag is not Guid noteId) return;
+
+        var item = _zOrderItems.FirstOrDefault(z => z.NoteId == noteId);
+        var preview = item?.DisplayText ?? "（不明）";
+
+        var result = MessageBox.Show(
+            $"付箋「{preview}」を削除しますか？\nこの操作は元に戻せません。",
+            "TopFusen — 付箋の削除",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (result != MessageBoxResult.Yes) return;
+
+        _noteManager.DeleteNote(noteId);
+        PopulateZOrderList();
+        Log.Information("設定画面: 付箋を削除 {NoteId}", noteId);
     }
 
     // ==========================================
