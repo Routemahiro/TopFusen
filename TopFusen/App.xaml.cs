@@ -175,6 +175,18 @@ public partial class App : Application
         };
         menu.Items.Add(hideItem);
 
+        // --- Z順管理（Phase 9）---
+        var zOrderItem = new MenuItem { Header = "📊 Z順管理..." };
+        zOrderItem.Click += async (_, _) =>
+        {
+            // トレイメニューが閉じるのを待つ
+            await Task.Delay(200);
+            if (_noteManager == null) return;
+            var zOrderWindow = new Views.ZOrderWindow(_noteManager);
+            zOrderWindow.ShowDialog();
+        };
+        menu.Items.Add(zOrderItem);
+
         // --- 設定を開く（FR-TRAY-4）--- stub
         var settingsItem = new MenuItem { Header = "⚙ 設定..." };
         settingsItem.Click += (_, _) =>

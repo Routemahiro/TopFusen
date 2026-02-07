@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Interop;
 using Serilog;
 using TopFusen.Models;
+using TopFusen.Interop;
 using TopFusen.Views;
 
 namespace TopFusen.Services;
@@ -172,6 +173,12 @@ public class NoteManager
             }
         }
 
+        // Phase 9: 編集ON時に Z順を再適用（Uncloak 後に順序を確定させる）
+        if (isEditMode)
+        {
+            ApplyZOrder();
+        }
+
         Log.Information("編集モード一括切替: {Mode}（対象: {Count}枚）",
             isEditMode ? "ON" : "OFF", _notes.Count);
     }
@@ -279,7 +286,11 @@ public class NoteManager
         // 4. P8-6: デスクトップ喪失フォールバック — 存在しない VD に所属する付箋を現在VDに救済
         RescueOrphanedNotes();
 
-        // 5. 孤立 RTF ファイルの掃除
+        // 5. Phase 9: 全 VD の Z順リストを実際の付箋と同期 + Z順を適用
+        SyncAllZOrderLists();
+        ApplyZOrder();
+
+        // 6. 孤立 RTF ファイルの掃除
         var validIds = new HashSet<Guid>(_notes.Select(n => n.Model.NoteId));
         _persistence.CleanupOrphanedRtfFiles(validIds);
 
@@ -405,6 +416,10 @@ public class NoteManager
         window.SetFontAllowList(_appSettings.FontAllowList);
 
         _notes.Add((model, window));
+
+        // Phase 9: 新規付箋を Z順リストの前面に追加
+        AddToZOrder(model);
+
         window.Show();
 
         // DJ-7/DJ-8: Show() 後に実際のモード状態を適用
@@ -416,6 +431,9 @@ public class NoteManager
         {
             window.SetClickThrough(true);
         }
+
+        // Phase 9: Z順を適用（Show() 後に呼ぶこと）
+        ApplyZOrder();
 
         // Phase 5: 変更追跡を有効化
         window.EnableChangeTracking();
@@ -487,6 +505,10 @@ public class NoteManager
         WireUpNoteEvents(window);
 
         _notes.Add((model, window));
+
+        // Phase 9: 複製付箋を Z順リストの前面に追加
+        AddToZOrder(model);
+
         window.Show();
 
         // Phase 5: RTF コンテンツを複製元からコピー
@@ -511,6 +533,9 @@ public class NoteManager
         {
             SelectNote(model.NoteId);
         }
+
+        // Phase 9: Z順を適用（Show() 後に呼ぶこと）
+        ApplyZOrder();
 
         // Phase 5: 変更追跡を有効化 + 保存スケジュール
         window.EnableChangeTracking();
@@ -543,6 +568,9 @@ public class NoteManager
 
         _notes.RemoveAt(index);
         window.Close();
+
+        // Phase 9: Z順リストから除去
+        RemoveFromZOrder(noteId);
 
         // 選択中だった場合は選択をクリア
         if (SelectedNoteId == noteId)
@@ -675,6 +703,9 @@ public class NoteManager
             }
         }
 
+        // Phase 9: 切替先デスクトップの Z順を適用
+        ApplyZOrder(currentDesktopId);
+
         Log.Information("デスクトップ切替処理: VD={DesktopId}, 表示={Uncloak}, 非表示={Cloak}, 救済={Rescued}, EditMode={EditMode}",
             currentDesktopId, uncloakCount, cloakCount, rescuedCount, IsEditMode);
     }
@@ -731,6 +762,188 @@ public class NoteManager
     }
 
     // ==========================================
+    //  Phase 9: Z順管理（FR-ZORDER / DJ-2）
+    // ==========================================
+
+    /// <summary>
+    /// 指定デスクトップの Z順リストを取得（なければ作成）
+    /// </summary>
+    private List<Guid> GetOrCreateZOrderList(Guid desktopId)
+    {
+        if (!_appSettings.ZOrderByDesktop.TryGetValue(desktopId, out var list))
+        {
+            list = new List<Guid>();
+            _appSettings.ZOrderByDesktop[desktopId] = list;
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// 付箋を Z順リストの最前面（index 0）に追加する
+    /// </summary>
+    private void AddToZOrder(NoteModel model)
+    {
+        if (model.DesktopId == Guid.Empty) return;
+        var list = GetOrCreateZOrderList(model.DesktopId);
+        list.Remove(model.NoteId); // 既存なら除去
+        list.Insert(0, model.NoteId); // 最前面に追加
+    }
+
+    /// <summary>
+    /// 付箋を全 Z順リストから除去する
+    /// </summary>
+    private void RemoveFromZOrder(Guid noteId)
+    {
+        foreach (var list in _appSettings.ZOrderByDesktop.Values)
+        {
+            list.Remove(noteId);
+        }
+    }
+
+    /// <summary>
+    /// 指定デスクトップの Z順リストを実際の付箋と同期する
+    /// （存在しない付箋を除去、リストに漏れた付箋を最前面に追加）
+    /// </summary>
+    private void SyncZOrderList(Guid desktopId)
+    {
+        var list = GetOrCreateZOrderList(desktopId);
+        var desktopNoteIds = _notes
+            .Where(n => n.Model.DesktopId == desktopId)
+            .Select(n => n.Model.NoteId)
+            .ToHashSet();
+
+        // リストにいるが付箋が存在しないものを除去
+        list.RemoveAll(id => !desktopNoteIds.Contains(id));
+
+        // 付箋が存在するがリストにないものを最前面に追加
+        foreach (var noteId in desktopNoteIds)
+        {
+            if (!list.Contains(noteId))
+            {
+                list.Insert(0, noteId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 全デスクトップの Z順リストを同期する（起動時に呼ぶ）
+    /// </summary>
+    private void SyncAllZOrderLists()
+    {
+        var desktopIds = _notes
+            .Where(n => n.Model.DesktopId != Guid.Empty)
+            .Select(n => n.Model.DesktopId)
+            .Distinct()
+            .ToList();
+
+        foreach (var desktopId in desktopIds)
+        {
+            SyncZOrderList(desktopId);
+        }
+
+        // 空の Z順リストを掃除
+        var emptyKeys = _appSettings.ZOrderByDesktop
+            .Where(kv => kv.Value.Count == 0)
+            .Select(kv => kv.Key)
+            .ToList();
+        foreach (var key in emptyKeys)
+        {
+            _appSettings.ZOrderByDesktop.Remove(key);
+        }
+    }
+
+    /// <summary>
+    /// 指定デスクトップ（省略時は現在VD）の Z順を SetWindowPos で適用する
+    /// ZOrderByDesktop[desktopId] の並び順: index 0 = 最前面、末尾 = 最背面
+    /// 適用手順: 末尾→先頭の順に HWND_TOPMOST で配置（最後に配置した窓が最前面）
+    /// DJ-2: クリック/アクティブ化で Z順が崩れた場合のリセットにも使用
+    /// </summary>
+    public void ApplyZOrder(Guid? desktopId = null)
+    {
+        var targetDesktopId = desktopId
+            ?? (_vdService.IsAvailable ? _vdService.GetCurrentDesktopIdFast() : null);
+
+        if (!targetDesktopId.HasValue) return;
+        if (!_appSettings.ZOrderByDesktop.TryGetValue(targetDesktopId.Value, out var zOrder)) return;
+        if (zOrder.Count == 0) return;
+
+        // 末尾（最背面）→ 先頭（最前面）の順に SetWindowPos
+        for (int i = zOrder.Count - 1; i >= 0; i--)
+        {
+            var noteId = zOrder[i];
+            var entry = _notes.FirstOrDefault(n => n.Model.NoteId == noteId);
+            if (entry.Window == null) continue;
+
+            var hwnd = new WindowInteropHelper(entry.Window).Handle;
+            if (hwnd == IntPtr.Zero) continue;
+
+            NativeMethods.SetWindowPos(
+                hwnd, NativeMethods.HWND_TOPMOST,
+                0, 0, 0, 0,
+                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+        }
+    }
+
+    /// <summary>
+    /// Z順を外部から更新する（Z順管理ウィンドウの D&D 並び替えから呼ばれる）
+    /// </summary>
+    public void UpdateZOrder(Guid desktopId, List<Guid> orderedNoteIds)
+    {
+        _appSettings.ZOrderByDesktop[desktopId] = new List<Guid>(orderedNoteIds);
+        ApplyZOrder(desktopId);
+        _persistence.ScheduleSave();
+        Log.Information("Z順を更新: VD={DesktopId}, 付箋数={Count}", desktopId, orderedNoteIds.Count);
+    }
+
+    /// <summary>
+    /// 現在の仮想デスクトップ ID を取得する（VD 未対応なら null）
+    /// </summary>
+    public Guid? GetCurrentDesktopId()
+    {
+        return _vdService.IsAvailable ? _vdService.GetCurrentDesktopIdFast() : null;
+    }
+
+    /// <summary>
+    /// デスクトップ名を取得する
+    /// </summary>
+    public string GetDesktopName(Guid desktopId)
+    {
+        if (!_vdService.IsAvailable) return "デスクトップ";
+        var desktops = _vdService.GetDesktopListFromRegistry();
+        var match = desktops.FirstOrDefault(d => d.Id == desktopId);
+        return !string.IsNullOrEmpty(match.Name) ? match.Name : $"Desktop {desktopId.ToString("N")[..8]}…";
+    }
+
+    /// <summary>
+    /// 指定デスクトップの付箋を Z順で返す（Z順管理ウィンドウ用）
+    /// </summary>
+    public List<(Guid NoteId, string Preview, string BgHex)> GetOrderedNotesForDesktop(Guid desktopId)
+    {
+        SyncZOrderList(desktopId);
+        var zOrder = GetOrCreateZOrderList(desktopId);
+        var desktopNotes = _notes
+            .Where(n => n.Model.DesktopId == desktopId)
+            .ToDictionary(n => n.Model.NoteId);
+
+        var result = new List<(Guid, string, string)>();
+        foreach (var noteId in zOrder)
+        {
+            if (desktopNotes.TryGetValue(noteId, out var entry))
+            {
+                // FirstLinePreview を最新に更新
+                entry.Model.FirstLinePreview = entry.Window.GetFirstLinePreview();
+                var preview = string.IsNullOrWhiteSpace(entry.Model.FirstLinePreview)
+                    ? "（空）" : entry.Model.FirstLinePreview;
+                var bgHex = PaletteDefinitions.GetHexColor(
+                    entry.Model.Style.BgPaletteCategoryId, entry.Model.Style.BgColorId)
+                    ?? PaletteDefinitions.DefaultHexColor;
+                result.Add((noteId, preview, bgHex));
+            }
+        }
+        return result;
+    }
+
+    // ==========================================
     //  内部ヘルパー
     // ==========================================
 
@@ -759,6 +972,8 @@ public class NoteManager
     private void OnNoteActivated(Guid noteId)
     {
         SelectNote(noteId);
+        // Phase 9: DJ-2 — クリック/アクティブ化で Z順を変えない（設定した順序を再適用）
+        ApplyZOrder();
     }
 
     private void OnDeleteRequested(Guid noteId)

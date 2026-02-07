@@ -1,0 +1,114 @@
+<Window x:Class="TopFusen.Views.ZOrderWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dd="urn:gong-wpf-dragdrop"
+        Title="Z順管理"
+        Width="340" Height="420"
+        MinWidth="280" MinHeight="300"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResizeWithGrip"
+        Background="#FFF5F5F5">
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- ヘッダー -->
+            <RowDefinition Height="Auto"/>  <!-- 説明 -->
+            <RowDefinition Height="*"/>     <!-- リスト -->
+            <RowDefinition Height="Auto"/>  <!-- ボタン -->
+        </Grid.RowDefinitions>
+
+        <!-- ヘッダー: デスクトップ名 -->
+        <TextBlock x:Name="HeaderText"
+                   Grid.Row="0"
+                   FontSize="15"
+                   FontWeight="SemiBold"
+                   Foreground="#FF333333"
+                   Margin="0,0,0,4"/>
+
+        <!-- 説明テキスト -->
+        <TextBlock Grid.Row="1"
+                   Text="ドラッグで並び替え — 上が前面、下が背面"
+                   FontSize="11"
+                   Foreground="#FF888888"
+                   Margin="0,0,0,8"/>
+
+        <!-- Z順リスト（D&D対応） -->
+        <Border Grid.Row="2"
+                BorderBrush="#DDDDDD"
+                BorderThickness="1"
+                CornerRadius="4"
+                Background="White">
+            <ListBox x:Name="ZOrderListBox"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     HorizontalContentAlignment="Stretch"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     dd:DragDrop.IsDragSource="True"
+                     dd:DragDrop.IsDropTarget="True"
+                     dd:DragDrop.UseDefaultDragAdorner="True"
+                     dd:DragDrop.UseDefaultEffectDataTemplate="True">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="2,4" Height="32">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>  <!-- ドラッグハンドル -->
+                                <ColumnDefinition Width="Auto"/>  <!-- カラー丸 -->
+                                <ColumnDefinition Width="*"/>     <!-- テキスト -->
+                            </Grid.ColumnDefinitions>
+
+                            <!-- ドラッグハンドル -->
+                            <TextBlock Grid.Column="0"
+                                       Text="⠿"
+                                       FontSize="16"
+                                       Foreground="#AAAAAA"
+                                       VerticalAlignment="Center"
+                                       Margin="4,0,8,0"
+                                       Cursor="SizeAll"/>
+
+                            <!-- 背景色インジケータ -->
+                            <Ellipse Grid.Column="1"
+                                     Width="16" Height="16"
+                                     Stroke="#CCCCCC" StrokeThickness="1"
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,8,0">
+                                <Ellipse.Fill>
+                                    <SolidColorBrush Color="{Binding BgColor}"/>
+                                </Ellipse.Fill>
+                            </Ellipse>
+
+                            <!-- 付箋テキスト（1行目） -->
+                            <TextBlock Grid.Column="2"
+                                       Text="{Binding DisplayText}"
+                                       FontSize="13"
+                                       Foreground="#FF333333"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0,1"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+            </ListBox>
+        </Border>
+
+        <!-- 下部ボタン -->
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,10,0,0">
+            <TextBlock x:Name="NoteCountText"
+                       FontSize="11"
+                       Foreground="#FF888888"
+                       VerticalAlignment="Center"
+                       Margin="0,0,12,0"/>
+            <Button Content="閉じる"
+                    Width="80" Height="28"
+                    Click="CloseButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
