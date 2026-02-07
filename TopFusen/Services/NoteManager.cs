@@ -583,11 +583,39 @@ public class NoteManager
     /// <summary>
     /// デスクトップ切替時に付箋の表示/非表示を制御する（DJ-10）
     /// 現在の VD に属する付箋を Uncloak、それ以外を Cloak
+    /// ★ P8-6: 孤立付箋（削除された VD に所属）はリアルタイムで現在 VD に救済
     /// ★ 編集モード中は、現在VDの付箋のみ WS_EX_TRANSPARENT を外してクリック可能にする
     ///    非現在VDの付箋は WS_EX_TRANSPARENT を維持して OS の VD 追跡干渉を回避
     /// </summary>
     public void HandleDesktopSwitch(Guid currentDesktopId)
     {
+        // P8-6: VD 切替時に孤立付箋をリアルタイム救済
+        //  （VD が削除された直後の切替イベントで検知して、即座に現在VDに付替える）
+        var orphanedIds = _vdService.FindOrphanedDesktopIds(
+            _notes.Where(n => n.Model.DesktopId != Guid.Empty)
+                  .Select(n => n.Model.DesktopId)
+                  .Distinct());
+
+        var rescuedCount = 0;
+        if (orphanedIds.Count > 0)
+        {
+            foreach (var (model, _) in _notes)
+            {
+                if (orphanedIds.Contains(model.DesktopId))
+                {
+                    Log.Information("P8-6 リアルタイム救済: {NoteId} (旧VD={OldId} → 現在VD={NewId})",
+                        model.NoteId, model.DesktopId, currentDesktopId);
+                    model.DesktopId = currentDesktopId;
+                    rescuedCount++;
+                }
+            }
+            if (rescuedCount > 0)
+            {
+                _persistence.ScheduleSave();
+            }
+        }
+
+        // 通常の Cloak/Uncloak 処理
         var cloakCount = 0;
         var uncloakCount = 0;
 
@@ -637,8 +665,8 @@ public class NoteManager
             }
         }
 
-        Log.Information("デスクトップ切替処理: VD={DesktopId}, 表示={Uncloak}, 非表示={Cloak}, EditMode={EditMode}",
-            currentDesktopId, uncloakCount, cloakCount, IsEditMode);
+        Log.Information("デスクトップ切替処理: VD={DesktopId}, 表示={Uncloak}, 非表示={Cloak}, 救済={Rescued}, EditMode={EditMode}",
+            currentDesktopId, uncloakCount, cloakCount, rescuedCount, IsEditMode);
     }
 
     // ==========================================
