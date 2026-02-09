@@ -537,9 +537,9 @@ public partial class NoteWindow : Window
                 if (foreground is SolidColorBrush brush) TextColorIndicator.Fill = brush;
             }
 
-            // --- Phase 15: テキスト配置 ---
-            var alignProp = selection.GetPropertyValue(Paragraph.TextAlignmentProperty);
-            var alignment = alignProp is TextAlignment ta ? ta : TextAlignment.Left;
+            // --- Phase 15: テキスト配置（段落から直接取得） ---
+            var para = selection.Start.Paragraph;
+            var alignment = para?.TextAlignment ?? TextAlignment.Left;
             SetToolbarButtonActive(AlignLeftButton, alignment == TextAlignment.Left);
             SetToolbarButtonActive(AlignCenterButton, alignment == TextAlignment.Center);
             SetToolbarButtonActive(AlignRightButton, alignment == TextAlignment.Right);
@@ -711,51 +711,46 @@ public partial class NoteWindow : Window
     }
 
     // ==========================================
-    //  Phase 15: テキスト配置（水平3方向 + 垂直2方向）
+    //  Phase 15: テキスト配置（水平3方向 + 垂直3方向）
     // ==========================================
 
     /// <summary>左揃えボタンクリック</summary>
     private void AlignLeftButton_Click(object sender, RoutedEventArgs e)
     {
-        ApplyTextAlignment(TextAlignment.Left);
+        NoteRichTextBox.Focus();
+        EditingCommands.AlignLeft.Execute(null, NoteRichTextBox);
+        UpdateToolbarState();
     }
 
     /// <summary>中央揃えボタンクリック</summary>
     private void AlignCenterButton_Click(object sender, RoutedEventArgs e)
     {
-        ApplyTextAlignment(TextAlignment.Center);
+        NoteRichTextBox.Focus();
+        EditingCommands.AlignCenter.Execute(null, NoteRichTextBox);
+        UpdateToolbarState();
     }
 
     /// <summary>右揃えボタンクリック</summary>
     private void AlignRightButton_Click(object sender, RoutedEventArgs e)
     {
-        ApplyTextAlignment(TextAlignment.Right);
-    }
-
-    /// <summary>
-    /// 段落の TextAlignment を適用する（選択範囲の段落に適用）
-    /// </summary>
-    private void ApplyTextAlignment(TextAlignment alignment)
-    {
         NoteRichTextBox.Focus();
-
-        var selection = NoteRichTextBox.Selection;
-        if (selection == null) return;
-
-        // 選択範囲の段落に TextAlignment を適用
-        selection.ApplyPropertyValue(Paragraph.TextAlignmentProperty, alignment);
-
+        EditingCommands.AlignRight.Execute(null, NoteRichTextBox);
         UpdateToolbarState();
     }
 
     /// <summary>
-    /// 垂直配置トグルボタンクリック（上揃え ↔ 中央揃え）
+    /// 垂直配置サイクルボタンクリック（上揃え → 中央揃え → 下揃え → 上揃え…）
     /// 付箋単位の設定で、NoteStyle に保存される
     /// </summary>
     private void VerticalAlignButton_Click(object sender, RoutedEventArgs e)
     {
         var current = Model.Style.VerticalTextAlignment;
-        var next = current == "center" ? "top" : "center";
+        var next = current switch
+        {
+            "top" => "center",
+            "center" => "bottom",
+            _ => "top",
+        };
         Model.Style.VerticalTextAlignment = next;
         ApplyVerticalAlignment();
         UpdateVerticalAlignButton();
@@ -767,20 +762,34 @@ public partial class NoteWindow : Window
     /// </summary>
     private void ApplyVerticalAlignment()
     {
-        NoteRichTextBox.VerticalContentAlignment = Model.Style.VerticalTextAlignment == "center"
-            ? VerticalAlignment.Center
-            : VerticalAlignment.Top;
+        NoteRichTextBox.VerticalContentAlignment = Model.Style.VerticalTextAlignment switch
+        {
+            "center" => VerticalAlignment.Center,
+            "bottom" => VerticalAlignment.Bottom,
+            _ => VerticalAlignment.Top,
+        };
     }
 
     /// <summary>
-    /// 垂直配置ボタンのアイコンを現在の状態に合わせて更新する
+    /// 垂直配置ボタンのアイコンとツールチップを現在の状態に合わせて更新する
     /// </summary>
     private void UpdateVerticalAlignButton()
     {
-        var isCenter = Model.Style.VerticalTextAlignment == "center";
-        VerticalAlignIcon.Text = isCenter ? "⬍" : "⬆";
-        VerticalAlignButton.ToolTip = isCenter ? "垂直: 中央揃え → 上揃えに変更" : "垂直: 上揃え → 中央揃えに変更";
-        SetToolbarButtonActive(VerticalAlignButton, isCenter);
+        var align = Model.Style.VerticalTextAlignment;
+        VerticalAlignIcon.Text = align switch
+        {
+            "center" => "⬍",
+            "bottom" => "⬇",
+            _ => "⬆",
+        };
+        VerticalAlignButton.ToolTip = align switch
+        {
+            "top" => "垂直: 上揃え（クリックで中央揃えに変更）",
+            "center" => "垂直: 中央揃え（クリックで下揃えに変更）",
+            "bottom" => "垂直: 下揃え（クリックで上揃えに変更）",
+            _ => "垂直配置",
+        };
+        SetToolbarButtonActive(VerticalAlignButton, align != "top");
     }
 
     // --- 文字色パレット ---
