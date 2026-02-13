@@ -94,3 +94,12 @@ $RECYCLE.BIN/
 
 # Temporary commit message file (PowerShell Japanese encoding workaround)
 commit_msg.txt
+
+# Local secrets / environment
+.env
+.env.*
+!.env.example
+
+# Editor-local settings (optional, keep machine-specific files out)
+.vscode/
+.cursor/
