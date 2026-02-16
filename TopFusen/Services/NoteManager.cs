@@ -601,6 +601,7 @@ public class NoteManager
             Opacity0to100 = source.Model.Style.Opacity0to100,
             TextColor = source.Model.Style.TextColor,
             FontFamilyName = source.Model.Style.FontFamilyName,
+            VerticalTextAlignment = source.Model.Style.VerticalTextAlignment,
         };
 
         // 画面内にクランプ

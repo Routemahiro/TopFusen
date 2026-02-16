@@ -26,6 +26,8 @@ namespace TopFusen.Views;
 /// </summary>
 public partial class NoteWindow : Window
 {
+    private static readonly Thickness BaseDocumentPadding = new(2);
+
     /// <summary>この付箋に対応するデータモデル</summary>
     public NoteModel Model { get; }
 
@@ -284,6 +286,10 @@ public partial class NoteWindow : Window
             TextColorPopup.IsOpen = false;
             StylePopup.IsOpen = false;
         }
+
+        // レイアウト変化（ツールバー/下部バー表示、スクロールバー切替）後に垂直配置を再適用
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
+            new Action(ApplyVerticalAlignment));
     }
 
     // ==========================================
@@ -762,12 +768,33 @@ public partial class NoteWindow : Window
     /// </summary>
     private void ApplyVerticalAlignment()
     {
-        NoteRichTextBox.VerticalContentAlignment = Model.Style.VerticalTextAlignment switch
+        var document = NoteRichTextBox.Document;
+        if (document == null) return;
+
+        // RichTextBox.VerticalContentAlignment は FlowDocument の見た目位置に効きにくいため、
+        // PagePadding の上余白を動的計算して中央/下揃えを実現する。
+        document.PagePadding = BaseDocumentPadding;
+        NoteRichTextBox.UpdateLayout();
+
+        var extraTop = 0.0;
+        var viewport = NoteRichTextBox.ViewportHeight;
+        var extent = NoteRichTextBox.ExtentHeight;
+        var freeSpace = viewport - extent;
+        if (freeSpace > 0)
         {
-            "center" => VerticalAlignment.Center,
-            "bottom" => VerticalAlignment.Bottom,
-            _ => VerticalAlignment.Top,
-        };
+            extraTop = Model.Style.VerticalTextAlignment switch
+            {
+                "center" => freeSpace / 2.0,
+                "bottom" => freeSpace,
+                _ => 0.0,
+            };
+        }
+
+        document.PagePadding = new Thickness(
+            BaseDocumentPadding.Left,
+            BaseDocumentPadding.Top + extraTop,
+            BaseDocumentPadding.Right,
+            BaseDocumentPadding.Bottom);
     }
 
     /// <summary>
@@ -1215,6 +1242,8 @@ public partial class NoteWindow : Window
 
     private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        ApplyVerticalAlignment();
+
         if (!_isTrackingChanges) return;
         SyncModelFromWindow();
         NoteChanged?.Invoke(Model.NoteId);
@@ -1222,6 +1251,8 @@ public partial class NoteWindow : Window
 
     private void OnRichTextBoxTextChanged(object sender, TextChangedEventArgs e)
     {
+        ApplyVerticalAlignment();
+
         if (!_isTrackingChanges || _isLoadingContent) return;
         Model.FirstLinePreview = GetFirstLinePreview();
         NoteChanged?.Invoke(Model.NoteId);
